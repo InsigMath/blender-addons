@@ -37,6 +37,7 @@ from bpy.app.handlers import persistent
 
 from io_coat3D import tex
 from io_coat3D import texVR
+from io_coat3D import folders
 
 import os
 import platform
@@ -59,14 +60,49 @@ from bpy.props import (
         PointerProperty,
         )
 
-bpy.coat3D = dict()
-bpy.coat3D['active_coat'] = ''
-bpy.coat3D['status'] = 0
+foundExchangeFolder = False
+saved_exchange_folder = ''
+liveUpdate = True
+mTime = 0
 
-initial_settings = True
-time_interval = 2.0
-global_exchange_folder = ''
+@persistent
+def every_3_seconds():
 
+    global global_exchange_folder
+    global liveUpdate
+    global mTime
+    global foundExchangeFolder
+    try:
+        coat3D = bpy.context.scene.coat3D
+ 
+
+        if(foundExchangeFolder == False):
+            foundExchangeFolder, global_exchange_folder = folders.InitFolders()
+
+        Export_folder  = coat3D.exchangeFolder
+        Export_folder += ('%sexport.txt' % (os.sep))
+
+        if (os.path.isfile(Export_folder) and mTime != os.path.getmtime(Export_folder)):
+
+            for objekti in bpy.data.objects:
+                if(objekti.coat3D.applink_mesh):
+                    tex.updatetextures(objekti)
+
+            mTime = os.path.getmtime(Export_folder)
+        
+        if (os.path.normpath(global_exchange_folder) != os.path.normpath(coat3D.exchangeFolder) and coat3D.exchangeFolder != ''):
+            folders.updateExchangeFile(coat3D.exchangeFolder)
+
+    except:
+        pass
+    
+    return 3.0
+
+@persistent
+def load_handler(dummy):
+    global foundExchangeFolder
+    foundExchangeFolder = False
+    bpy.app.timers.register(every_3_seconds)
 
 def removeFile(exportfile):
     if (os.path.isfile(exportfile)):
@@ -89,127 +125,6 @@ def folder_size(path):
                 os.remove(os.path.abspath(oldest_file))
             else:
                 tosi = False
-
-def set_exchange_folder():
-    platform = os.sys.platform
-    coat3D = bpy.context.scene.coat3D
-
-    if(platform == 'win32' or platform == 'darwin'):
-        exchange = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + 'Applinks' + os.sep + '3D-Coat' + os.sep +'Exchange'
-    else:
-        exchange = os.path.expanduser("~") + os.sep + '3D-CoatV4' + os.sep + 'Exchange'
-        if not(os.path.isdir(exchange)):
-            exchange = os.path.expanduser("~") + os.sep + '3D-CoatV3' + os.sep + 'Exchange'
-    if(not(os.path.isdir(exchange))):
-        exchange = coat3D.exchangedir
-
-    if(os.path.isdir(exchange)):
-        bpy.coat3D['status'] = 1
-
-        if(platform == 'win32' or platform == 'darwin'):
-
-            exchange_path = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender' + os.sep + 'Exchange_folder.txt'
-            applink_folder = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender'
-            if(not(os.path.isdir(applink_folder))):
-                os.makedirs(applink_folder)
-
-        else:
-
-            exchange_path = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender' + os.sep + 'Exchange_folder.txt'
-            applink_folder = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender'
-            if(not(os.path.isdir(applink_folder))):
-                os.makedirs(applink_folder)
-
-        if(os.path.isfile(exchange_path) == False):
-
-            file = open(exchange_path, "w")
-            file.write("%s"%(exchange_path))
-            file.close()
-
-        else:
-
-            exchangeline = open(exchange_path)
-            for line in exchangeline:
-                source = line
-                break
-            exchangeline.close()
-
-            if(source != coat3D.exchangedir and coat3D.exchangedir != '' and coat3D.exchangedir.rfind('Exchange') >= 0):
-
-                file = open(exchange_path, "w")
-                file.write("%s"%(coat3D.exchangedir))
-                file.close()
-                exchange = coat3D.exchangedir
-
-            else:
-                exchange = source
-
-    else:
-        if(platform == 'win32' or platform == 'darwin'):
-            exchange_path = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender' + os.sep + 'Exchange_folder.txt'
-        else:
-            exchange_path = os.path.expanduser("~") + os.sep + '3DC2Blender' + os.sep + 'Exchange_folder.txt'
-        if(os.path.isfile(exchange_path)):
-            ex_path =''
-
-            ex_pathh = open(exchange_path)
-            for line in ex_pathh:
-                ex_path = line
-                break
-            ex_pathh.close()
-
-            if(os.path.isdir(ex_path) and ex_path.rfind('Exchange') >= 0):
-                exchange = ex_path
-                bpy.coat3D['status'] = 1
-            else:
-                bpy.coat3D['status'] = 0
-        else:
-            bpy.coat3D['status'] = 0
-    if(bpy.coat3D['status'] == 1):
-        Blender_folder = ("%s%sBlender"%(exchange,os.sep))
-        Blender_export = Blender_folder
-        path3b_now = exchange
-        path3b_now += ('last_saved_3b_file.txt')
-        Blender_export += ('%sexport.txt'%(os.sep))
-
-        if(not(os.path.isdir(Blender_folder))):
-            os.makedirs(Blender_folder)
-            Blender_folder1 = os.path.join(Blender_folder,"run.txt")
-            file = open(Blender_folder1, "w")
-            file.close()
-
-            Blender_folder2 = os.path.join(Blender_folder, "extension.txt")
-            file = open(Blender_folder2, "w")
-            file.write("fbx")
-            file.close()
-
-            Blender_folder3 = os.path.join(Blender_folder, "preset.txt")
-            file = open(Blender_folder3, "w")
-            file.write("Blender Cycles")
-            file.close()
-
-    return exchange
-
-def set_working_folders():
-    platform = os.sys.platform
-    coat3D = bpy.context.scene.coat3D
-
-    if(platform == 'win32' or platform == 'darwin'):
-        if (coat3D.defaultfolder != '' and os.path.isdir(coat3D.defaultfolder)):
-            return coat3D.defaultfolder
-        else:
-            folder_objects = os.path.expanduser("~") + os.sep + 'Documents' + os.sep + '3DC2Blender' + os.sep + 'ApplinkObjects'
-            if(not(os.path.isdir(folder_objects))):
-                os.makedirs(folder_objects)
-    else:
-        if (coat3D.defaultfolder != '' and os.path.isdir(coat3D.defaultfolder)):
-            return coat3D.defaultfolder
-        else:
-            folder_objects = os.path.expanduser("~") + os.sep + '3DC2Blender' + os.sep + 'ApplinkObjects'
-            if(not(os.path.isdir(folder_objects))):
-                os.makedirs(folder_objects)
-
-    return folder_objects
 
 def make_texture_list(texturefolder):
     texturefolder += ('%stextures.txt'%(os.sep))
@@ -293,10 +208,10 @@ def updatemesh(objekti, proxy, texturelist):
                     if(udim_textures):
                         udim = proxy.data.uv_layers[index].name
                         udim_index = int(udim[2:]) - 1
-
+    
                     objekti.data.uv_layers[0].data[indi].uv[0] = proxy.data.uv_layers[index].data[indi].uv[0]
                     objekti.data.uv_layers[0].data[indi].uv[1] = proxy.data.uv_layers[index].data[indi].uv[1]
-
+            
         index = index + 1
 
     # Mesh Copy
@@ -313,46 +228,36 @@ class SCENE_OT_getback(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def invoke(self, context, event):
-
+        
         global global_exchange_folder
-        global initial_settings
         path_ex = ''
-
-        if(initial_settings):
-            global_exchange_folder = set_exchange_folder()
-            initial_settings = False
 
         Export_folder  = global_exchange_folder
         Blender_folder = os.path.join(Export_folder, 'Blender')
 
         BlenderFolder = Blender_folder
         ExportFolder = Export_folder
-
+        
         Blender_folder += ('%sexport.txt' % (os.sep))
         Export_folder += ('%sexport.txt' % (os.sep))
-
+        
         if (bpy.app.background == False):
             if os.path.isfile(Export_folder):
-
+                
                 print('BLENDER -> 3DC -> BLENDER WORKFLLOW')
-                DeleteExtra3DC()
+                DeleteExtra3DC() 
                 workflow1(ExportFolder)
                 removeFile(Export_folder)
-                removeFile(Blender_folder)
-
-
-
+                removeFile(Blender_folder)    
+            
             elif os.path.isfile(Blender_folder):
 
                 print('3DC -> BLENDER WORKFLLOW')
-                DeleteExtra3DC()
+                DeleteExtra3DC() 
                 workflow2(BlenderFolder)
                 removeFile(Blender_folder)
 
-
-
         return {'FINISHED'}
-
 
 class SCENE_OT_folder(bpy.types.Operator):
     bl_idname = "update_exchange_folder.pilgway_3d_coat"
@@ -361,12 +266,12 @@ class SCENE_OT_folder(bpy.types.Operator):
     bl_options = {'UNDO'}
 
     def invoke(self, context, event):
+        global foundExchangeFolder
         coat3D = bpy.context.scene.coat3D
-        if(os.path.isdir(coat3D.exchangedir)):
-            coat3D.exchange_found = True
-            bpy.coat3D['status'] = 1
+        if(os.path.isdir(coat3D.exchangeFolder)):
+            foundExchangeFolder= True
         else:
-            coat3D.exchange_found = False
+            foundExchangeFolder = False
 
         return {'FINISHED'}
 
@@ -381,7 +286,7 @@ class SCENE_OT_opencoat(bpy.types.Operator):
         coat3D = bpy.context.selected_objects[0].coat3D.applink_3b_path
         platform = os.sys.platform
         if (platform == 'win32' or platform == 'darwin'):
-            importfile = bpy.context.scene.coat3D.exchangedir
+            importfile = bpy.context.scene.coat3D.exchangeFolder
             importfile += ('%simport.txt' % (os.sep))
             file = open(importfile, "w")
             file.write("%s" % (coat3D))
@@ -389,7 +294,7 @@ class SCENE_OT_opencoat(bpy.types.Operator):
             file.write("\n[3B]")
             file.close()
         else:
-            importfile = bpy.context.scene.coat3D.exchangedir
+            importfile = bpy.context.scene.coat3D.exchangeFolder
             importfile += ('%simport.txt' % (os.sep))
             file = open(importfile, "w")
             file.write("%s" % (coat3D))
@@ -398,6 +303,27 @@ class SCENE_OT_opencoat(bpy.types.Operator):
             file.close()
 
         return {'FINISHED'}
+
+def scaleParents():
+    save = []
+    names =[]
+    
+    for objekti in bpy.context.selected_objects:
+        temp = objekti
+        while (temp.parent is not None and temp.parent.name not in names):
+            save.append([temp.parent,(temp.parent.scale[0],temp.parent.scale[1],temp.parent.scale[2])])
+            names.append(temp.parent)
+            temp = temp.parent
+
+    for name in names:
+        name.scale = (1,1,1)
+
+    return save
+
+def scaleBackParents(save):
+
+    for data in save:
+        data[0].scale = data[1]
 
 def deleteNodes(type):
 
@@ -577,7 +503,7 @@ class SCENE_OT_export(bpy.types.Operator):
 
     def invoke(self, context, event):
         bpy.ops.export_applink.pilgway_3d_coat()
-
+      
         return {'FINISHED'}
 
     def execute(self, context):
@@ -593,7 +519,7 @@ class SCENE_OT_export(bpy.types.Operator):
 
         export_ok = False
         coat3D = bpy.context.scene.coat3D
-
+      
         if (bpy.context.selected_objects == []):
             return {'FINISHED'}
         else:
@@ -606,29 +532,29 @@ class SCENE_OT_export(bpy.types.Operator):
             if (export_ok == False):
                 return {'FINISHED'}
 
+        scaled_objects = scaleParents()
 
         activeobj = bpy.context.active_object.name
         checkname = ''
         coa = bpy.context.active_object.coat3D
-        coat3D.exchangedir = set_exchange_folder()
 
-        p = pathlib.Path(coat3D.exchangedir)
-        kokeilu = coat3D.exchangedir[:-9]
+        p = pathlib.Path(coat3D.exchangeFolder)
+        kokeilu = coat3D.exchangeFolder[:-9]
         Blender_folder2 = ("%s%sExchange" % (kokeilu, os.sep))
         Blender_folder2 += ('%sexport.txt' % (os.sep))
 
         if (os.path.isfile(Blender_folder2)):
             os.remove(Blender_folder2)
-
-        if (not os.path.isdir(coat3D.exchangedir)):
+    
+        if (not os.path.isdir(coat3D.exchangeFolder)):
             coat3D.exchange_found = False
             return {'FINISHED'}
-
-        folder_objects = set_working_folders()
+       
+        folder_objects = folders.set_working_folders()
         folder_size(folder_objects)
 
-        importfile = coat3D.exchangedir
-        texturefile = coat3D.exchangedir
+        importfile = coat3D.exchangeFolder
+        texturefile = coat3D.exchangeFolder
         importfile += ('%simport.txt'%(os.sep))
         texturefile += ('%stextures.txt'%(os.sep))
 
@@ -639,6 +565,9 @@ class SCENE_OT_export(bpy.types.Operator):
         if(coat3D.type == 'autopo'):
             checkname = folder_objects + os.sep
             checkname = ("%sretopo.fbx" % (checkname))
+
+        elif(coat3D.type == 'update'):
+            checkname = bpy.context.selected_objects[0].coat3D.applink_address
 
         else:
             while(looking == True):
@@ -671,6 +600,8 @@ class SCENE_OT_export(bpy.types.Operator):
             os.makedirs(bake_location)
         else:
             os.makedirs(bake_location)
+
+        # BAKING #
 
         temp_string = ''
         for objekti in bpy.context.selected_objects:
@@ -775,6 +706,8 @@ class SCENE_OT_export(bpy.types.Operator):
                                     bpy.data.images.remove(image)
 
                             index_bake_tex += 1
+        
+        #BAKING ENDS
 
         #bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
         if(len(bpy.context.selected_objects) > 1 and coat3D.type != 'vox'):
@@ -827,11 +760,13 @@ class SCENE_OT_export(bpy.types.Operator):
                                     if(node.name.startswith('3DC_') == True):
                                         material.material.node_tree.nodes.remove(node)
 
+        
                 for ind, mat_list in enumerate(mod_mat_list):
                     if(mat_list == '__' + objekti.name):
                         for ind, mat in enumerate(mod_mat_list[mat_list]):
                             objekti.material_slots[mod_mat_list[mat_list][ind][0]].material = mod_mat_list[mat_list][ind][1]
 
+        scaleBackParents(scaled_objects)
         bpy.context.scene.render.engine = active_render
         return {'FINISHED'}
 
@@ -858,7 +793,7 @@ def DeleteExtra3DC():
                     bpy.data.images.remove(del_img)
 
             bpy.data.materials.remove(material)
-
+    
     image_del_list = []
     for image in bpy.data.images:
         if (image.name.startswith('3DC')):
@@ -936,8 +871,8 @@ def new_ref_function(new_applink_address, nimi):
     copymesh.rotation_euler = (0,0,0)
 
 
-def blender_3DC_blender(texturelist):
-
+def blender_3DC_blender(texturelist, file_applink_address):
+    
     coat3D = bpy.context.scene.coat3D
 
     old_materials = bpy.data.materials.keys()
@@ -949,18 +884,18 @@ def blender_3DC_blender(texturelist):
     import_type = []
 
     for objekti in bpy.data.objects:
-        if objekti.type == 'MESH':
+        if objekti.type == 'MESH' and objekti.coat3D.applink_address == file_applink_address:
             obj_coat = objekti.coat3D
-            if(obj_coat.applink_mesh == True):
-                object_list.append(objekti.name)
-                if(os.path.isfile(obj_coat.applink_address)):
-                    if (obj_coat.objecttime != str(os.path.getmtime(obj_coat.applink_address))):
-                        obj_coat.dime = objekti.dimensions
-                        obj_coat.import_mesh = True
-                        obj_coat.objecttime = str(os.path.getmtime(obj_coat.applink_address))
-                        if(obj_coat.applink_address not in import_list):
-                            import_list.append(obj_coat.applink_address)
-                            import_type.append(coat3D.type)
+            
+            object_list.append(objekti.name)
+            if(os.path.isfile(obj_coat.applink_address)):
+                if (obj_coat.objecttime != str(os.path.getmtime(obj_coat.applink_address))):
+                    obj_coat.dime = objekti.dimensions
+                    obj_coat.import_mesh = True
+                    obj_coat.objecttime = str(os.path.getmtime(obj_coat.applink_address))
+                    if(obj_coat.applink_address not in import_list):
+                        import_list.append(obj_coat.applink_address)
+                        import_type.append(coat3D.type)
 
     if(import_list or coat3D.importmesh):
         for idx, list in enumerate(import_list):
@@ -995,7 +930,7 @@ def blender_3DC_blender(texturelist):
         objekti = bpy.data.objects[oname]
         if(objekti.coat3D.applink_mesh == True):
 
-            path3b_n = coat3D.exchangedir
+            path3b_n = coat3D.exchangeFolder
             path3b_n += ('%slast_saved_3b_file.txt' % (os.sep))
 
             if(objekti.coat3D.import_mesh and coat3D.importmesh == True):
@@ -1028,16 +963,13 @@ def blender_3DC_blender(texturelist):
                         mat_list.append(obj_mat.material)
 
                 if(found_obj == True):
-                    exportfile = coat3D.exchangedir
-                    path3b_n = coat3D.exchangedir
+                    exportfile = coat3D.exchangeFolder
+                    path3b_n = coat3D.exchangeFolder
                     path3b_n += ('%slast_saved_3b_file.txt' % (os.sep))
                     exportfile += ('%sBlender' % (os.sep))
                     exportfile += ('%sexport.txt'%(os.sep))
                     if(os.path.isfile(exportfile)):
                         export_file = open(exportfile)
-                        for line in export_file:
-                            if line.rfind('.3b'):
-                                coat['active_coat'] = line
                         export_file.close()
                         os.remove(exportfile)
                     if(os.path.isfile(path3b_n)):
@@ -1089,7 +1021,7 @@ def blender_3DC_blender(texturelist):
 
                         #delete_materials_from_end(keep_materials_count, obj_proxy)
 
-
+               
                         updatemesh(objekti,obj_proxy, texturelist)
                         bpy.context.view_layer.objects.active = objekti
 
@@ -1130,7 +1062,8 @@ def blender_3DC_blender(texturelist):
                 objekti.select_set(False)
 
     if(coat3D.remove_path == True):
-        os.remove(path3b_n)
+        if(os.path.isfile(path3b_n)):
+            os.remove(path3b_n)
         coat3D.remove_path = False
 
     bpy.ops.object.select_all(action='DESELECT')
@@ -1165,7 +1098,7 @@ def blender_3DC_blender(texturelist):
             bpy.ops.import_scene.fbx(filepath=coat3D.bring_retopo_path, global_scale=1, axis_forward='X', use_custom_normals=False)
             os.remove(coat3D.bring_retopo_path)
 
-    kokeilu = coat3D.exchangedir[:-9]
+    kokeilu = coat3D.exchangeFolder[:-9]
     Blender_folder2 = ("%s%sExchange" % (kokeilu, os.sep))
     Blender_folder2 += ('%sexport.txt' % (os.sep))
     if (os.path.isfile(Blender_folder2)):
@@ -1178,9 +1111,9 @@ def blender_3DC(texturelist, new_applink_address):
         old_obj.coat3D.applink_old = True
 
     coat3D = bpy.context.scene.coat3D
-    Blender_folder = ("%s%sBlender"%(coat3D.exchangedir,os.sep))
+    Blender_folder = ("%s%sBlender"%(coat3D.exchangeFolder,os.sep))
     Blender_export = Blender_folder
-    path3b_now = coat3D.exchangedir + os.sep
+    path3b_now = coat3D.exchangeFolder + os.sep
     path3b_now += ('last_saved_3b_file.txt')
     Blender_export += ('%sexport.txt'%(os.sep))
     mat_list = []
@@ -1216,7 +1149,7 @@ def blender_3DC(texturelist, new_applink_address):
 
     old_materials = bpy.data.materials.keys()
     old_objects = bpy.data.objects.keys()
-
+  
     bpy.ops.import_scene.fbx(filepath=new_applink_address, global_scale = 1, axis_forward='-Z', axis_up='Y')
 
     new_materials = bpy.data.materials.keys()
@@ -1283,7 +1216,7 @@ def blender_3DC(texturelist, new_applink_address):
         if(new_obj.coat3D.applink_old == False):
             new_obj.coat3D.applink_old = True
 
-    kokeilu = coat3D.exchangedir[:-10]
+    kokeilu = coat3D.exchangeFolder[:-10]
     Blender_folder2 = ("%s%sExchange%sBlender" % (kokeilu, os.sep, os.sep))
     Blender_folder2 += ('%sexport.txt' % (os.sep))
 
@@ -1291,7 +1224,7 @@ def blender_3DC(texturelist, new_applink_address):
         os.remove(Blender_export)
     if (os.path.isfile(Blender_folder2)):
         os.remove(Blender_folder2)
-
+        
     for material in bpy.data.materials:
         if material.use_nodes == True:
             for node in material.node_tree.nodes:
@@ -1302,9 +1235,6 @@ def blender_3DC(texturelist, new_applink_address):
 def workflow1(ExportFolder):
 
     coat3D = bpy.context.scene.coat3D
-    coat = bpy.coat3D
-    coat3D.exchangedir = set_exchange_folder()
-
 
     texturelist = make_texture_list(ExportFolder)
 
@@ -1312,15 +1242,15 @@ def workflow1(ExportFolder):
         for image in bpy.data.images:
             if(image.filepath == texturepath[3] and image.users == 0):
                 bpy.data.images.remove(image)
-
-    path3b_now = coat3D.exchangedir
-
+    
+    path3b_now = coat3D.exchangeFolder
+    
     path3b_now += ('last_saved_3b_file.txt')
     new_applink_address = 'False'
     new_object = False
     new_ref_object = False
 
-    exportfile3 = coat3D.exchangedir
+    exportfile3 = coat3D.exchangeFolder
     exportfile3 += ('%sexport.txt' % (os.sep))
 
     if(os.path.isfile(exportfile3)):
@@ -1338,10 +1268,10 @@ def workflow1(ExportFolder):
                     new_ref_object = True
                     nimi = scene_objects.name
 
+    
 
 
-
-    exportfile = coat3D.exchangedir
+    exportfile = coat3D.exchangeFolder
     exportfile += ('%sBlender' % (os.sep))
     exportfile += ('%sexport.txt' % (os.sep))
     if (os.path.isfile(exportfile)):
@@ -1352,14 +1282,11 @@ def workflow1(ExportFolder):
         new_ref_function(new_applink_address, nimi)
 
     else:
-        blender_3DC_blender(texturelist)
+        blender_3DC_blender(texturelist, new_applink_address)
 
 def workflow2(BlenderFolder):
 
     coat3D = bpy.context.scene.coat3D
-    coat = bpy.coat3D
-    coat3D.exchangedir = set_exchange_folder()
-
 
     texturelist = make_texture_list(BlenderFolder)
 
@@ -1368,12 +1295,12 @@ def workflow2(BlenderFolder):
             if(image.filepath == texturepath[3] and image.users == 0):
                 bpy.data.images.remove(image)
 
-    kokeilu = coat3D.exchangedir
+    kokeilu = coat3D.exchangeFolder
 
     Blender_export = os.path.join(kokeilu, 'Blender')
-
-    path3b_now = coat3D.exchangedir
-
+    
+    path3b_now = coat3D.exchangeFolder
+    
     path3b_now += ('last_saved_3b_file.txt')
     Blender_export += ('%sexport.txt'%(os.sep))
     new_applink_address = 'False'
@@ -1393,7 +1320,7 @@ def workflow2(BlenderFolder):
                 if(scene_objects.coat3D.applink_address == new_applink_address):
                     new_object = False
 
-    exportfile = coat3D.exchangedir
+    exportfile = coat3D.exchangeFolder
     exportfile += ('%sBlender' % (os.sep))
     exportfile += ('%sexport.txt' % (os.sep))
     if (os.path.isfile(exportfile)):
@@ -1425,22 +1352,20 @@ class SCENE_PT_Main(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        coat = bpy.coat3D
         coat3D = bpy.context.scene.coat3D
-        if(bpy.context.active_object):
-            coa = bpy.context.active_object.coat3D
-        if(coat['status'] == 0):
+        global foundExchangeFolder
+
+        if(foundExchangeFolder == False):
             row = layout.row()
             row.label(text="Applink didn't find your 3d-Coat/Exchange folder.")
             row = layout.row()
             row.label(text="Please select it before using Applink.")
             row = layout.row()
-            row.prop(coat3D,"exchangedir",text="")
+            row.prop(coat3D,"exchangeFolder",text="")
             row = layout.row()
             row.operator("update_exchange_folder.pilgway_3d_coat", text="Apply folder")
 
         else:
-
             #Here you add your GUI
             row = layout.row()
             row.prop(coat3D,"type",text = "")
@@ -1570,7 +1495,7 @@ class SCENE_PT_Settings_Folders(ObjectButtonsPanel, bpy.types.Panel):
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=False, even_rows=False, align=True)
 
         col = flow.column()
-        col.prop(coat3D, "exchangedir", text="Exchange folder")
+        col.prop(coat3D, "exchangeFolder", text="Exchange folder")
 
         col = flow.column()
         col.prop(coat3D, "defaultfolder", text="Object/Texture folder")
@@ -1751,17 +1676,18 @@ class SceneCoat3D(PropertyGroup):
         name="FilePath",
         subtype="FILE_PATH",
     )
-    exchangedir: StringProperty(
-        name="FilePath",
-        subtype="DIR_PATH"
-    )
-    exchangefolder: StringProperty(
+    exchangeFolder: StringProperty(
         name="FilePath",
         subtype="DIR_PATH"
     )
     bring_retopo: BoolProperty(
         name="Import window",
         description="Allows to skip import dialog",
+        default=False
+    )
+    foundExchangeFolder: BoolProperty(
+        name="found Exchange Folder",
+        description="found Excahnge folder",
         default=False
     )
     delete_images: BoolProperty(
@@ -1859,6 +1785,7 @@ class SceneCoat3D(PropertyGroup):
                ("prim", "Mesh As Voxel Primitive", ""),
                ("curv", "Mesh As a Curve Profile", ""),
                ("autopo", "Mesh For Auto-retopology", ""),
+               ("update", "Update mesh/uvs", ""),
                ),
         default="ppp"
     )
@@ -2002,10 +1929,6 @@ classes = (
     )
 
 def register():
-    bpy.coat3D = dict()
-    bpy.coat3D['active_coat'] = ''
-    bpy.coat3D['status'] = 1
-    bpy.coat3D['kuva'] = 1
 
     bpy.types.Material.coat3D_diffuse = BoolProperty(
         name="Import diffuse texture",
@@ -2053,6 +1976,8 @@ def register():
         default=True
     )
 
+    
+
 
     from bpy.utils import register_class
     for cls in classes:
@@ -2061,7 +1986,8 @@ def register():
     bpy.types.Object.coat3D = PointerProperty(type=ObjectCoat3D)
     bpy.types.Scene.coat3D = PointerProperty(type=SceneCoat3D)
     bpy.types.Mesh.coat3D = PointerProperty(type=MeshCoat3D)
-    bpy.types.Material.coat3D = PointerProperty(type=MaterialCoat3D)
+    bpy.types.Material.coat3D = PointerProperty(type=MaterialCoat3D)  
+    bpy.app.handlers.load_post.append(load_handler)
 
     kc = bpy.context.window_manager.keyconfigs.addon
 
@@ -2085,7 +2011,6 @@ def unregister():
     bpy.types.Material.coat3D_displacement
     bpy.types.Material.coat3D_emissive
     bpy.types.Material.coat3D_alpha
-    del bpy.coat3D
 
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc:

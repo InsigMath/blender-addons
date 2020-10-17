@@ -39,6 +39,7 @@ move_active = None
 layer_collections = {}
 collection_tree = []
 collection_state = {}
+qcd_collection_state = {}
 expanded = set()
 row_index = 0
 max_lvl = 0
@@ -59,6 +60,8 @@ rto_history = {
     "indirect": {},
     "indirect_all": {},
 }
+
+qcd_history = {}
 
 expand_history = {
     "target": "",
@@ -130,6 +133,13 @@ class QCDSlots():
             return name in self._slots.values()
 
         raise
+
+    def object_in_slots(self, obj):
+        for collection in obj.users_collection:
+            if self.contains(name=collection.name):
+                return True
+
+        return False
 
     def get_data_for_blend(self):
         return f"{self._slots.__repr__()}\n{self.overrides.__repr__()}"
@@ -584,8 +594,9 @@ def get_modifiers(event):
     return set(modifiers)
 
 
-def generate_state():
+def generate_state(*, qcd=False):
     global layer_collections
+    global qcd_slots
 
     state = {
         "name": [],
@@ -607,6 +618,9 @@ def generate_state():
         state["render"].append(laycol["ptr"].collection.hide_render)
         state["holdout"].append(laycol["ptr"].holdout)
         state["indirect"].append(laycol["ptr"].indirect_only)
+
+    if qcd:
+        state["qcd"] = dict(qcd_slots)
 
     return state
 
@@ -656,6 +670,7 @@ class CMSendReport(Operator):
 
     def draw(self, context):
         layout = self.layout
+        col = layout.column(align=True)
 
         first = True
         string = ""
@@ -663,10 +678,10 @@ class CMSendReport(Operator):
         for num, char in enumerate(self.message):
             if char == "\n":
                 if first:
-                    layout.row().label(text=string, icon='ERROR')
+                    col.row(align=True).label(text=string, icon='ERROR')
                     first = False
                 else:
-                    layout.row().label(text=string, icon='BLANK1')
+                    col.row(align=True).label(text=string, icon='BLANK1')
 
                 string = ""
                 continue
@@ -674,9 +689,9 @@ class CMSendReport(Operator):
             string = string + char
 
         if first:
-            layout.row().label(text=string, icon='ERROR')
+            col.row(align=True).label(text=string, icon='ERROR')
         else:
-            layout.row().label(text=string, icon='BLANK1')
+            col.row(align=True).label(text=string, icon='BLANK1')
 
     def invoke(self, context, event):
         wm = context.window_manager
