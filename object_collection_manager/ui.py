@@ -32,20 +32,11 @@ from bpy.props import (
     StringProperty,
 )
 
+# For VARS
+from . import internals
+
+# For FUNCTIONS
 from .internals import (
-    collection_tree,
-    collection_state,
-    qcd_collection_state,
-    expanded,
-    get_max_lvl,
-    layer_collections,
-    rto_history,
-    qcd_history,
-    expand_history,
-    phantom_history,
-    copy_buffer,
-    swap_buffer,
-    qcd_slots,
     update_collection_tree,
     update_property_group,
     generate_state,
@@ -128,14 +119,14 @@ class CollectionManager(Operator):
         collapse_sec.alignment = 'LEFT'
         collapse_sec.enabled = False
 
-        if len(expanded) > 0:
+        if len(internals.expanded) > 0:
             text = "Collapse All Items"
         else:
             text = "Expand All Items"
 
         collapse_sec.operator("view3d.expand_all_items", text=text)
 
-        for laycol in collection_tree:
+        for laycol in internals.collection_tree:
             if laycol["has_children"]:
                 collapse_sec.enabled = True
                 break
@@ -214,16 +205,16 @@ class CollectionManager(Operator):
         copy_swap_icon = 'SELECT_INTERSECT'
 
         if cm.show_exclude:
-            exclude_all_history = rto_history["exclude_all"].get(view_layer.name, [])
+            exclude_all_history = internals.rto_history["exclude_all"].get(view_layer.name, [])
             depress = True if len(exclude_all_history) else False
             icon = 'CHECKBOX_HLT'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "exclude":
+            if internals.copy_buffer["RTO"] == "exclude":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "exclude":
+            if internals.swap_buffer["A"]["RTO"] == "exclude":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -233,16 +224,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_exclude_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_selectable:
-            select_all_history = rto_history["select_all"].get(view_layer.name, [])
+            select_all_history = internals.rto_history["select_all"].get(view_layer.name, [])
             depress = True if len(select_all_history) else False
             icon = 'RESTRICT_SELECT_OFF'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "select":
+            if internals.copy_buffer["RTO"] == "select":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "select":
+            if internals.swap_buffer["A"]["RTO"] == "select":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -252,16 +243,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_restrict_select_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_hide_viewport:
-            hide_all_history = rto_history["hide_all"].get(view_layer.name, [])
+            hide_all_history = internals.rto_history["hide_all"].get(view_layer.name, [])
             depress = True if len(hide_all_history) else False
             icon = 'HIDE_OFF'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "hide":
+            if internals.copy_buffer["RTO"] == "hide":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "hide":
+            if internals.swap_buffer["A"]["RTO"] == "hide":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -271,16 +262,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_hide_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_disable_viewport:
-            disable_all_history = rto_history["disable_all"].get(view_layer.name, [])
+            disable_all_history = internals.rto_history["disable_all"].get(view_layer.name, [])
             depress = True if len(disable_all_history) else False
             icon = 'RESTRICT_VIEW_OFF'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "disable":
+            if internals.copy_buffer["RTO"] == "disable":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "disable":
+            if internals.swap_buffer["A"]["RTO"] == "disable":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -290,16 +281,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_disable_viewport_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_render:
-            render_all_history = rto_history["render_all"].get(view_layer.name, [])
+            render_all_history = internals.rto_history["render_all"].get(view_layer.name, [])
             depress = True if len(render_all_history) else False
             icon = 'RESTRICT_RENDER_OFF'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "render":
+            if internals.copy_buffer["RTO"] == "render":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "render":
+            if internals.swap_buffer["A"]["RTO"] == "render":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -309,16 +300,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_disable_render_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_holdout:
-            holdout_all_history = rto_history["holdout_all"].get(view_layer.name, [])
+            holdout_all_history = internals.rto_history["holdout_all"].get(view_layer.name, [])
             depress = True if len(holdout_all_history) else False
             icon = 'HOLDOUT_ON'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "holdout":
+            if internals.copy_buffer["RTO"] == "holdout":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "holdout":
+            if internals.swap_buffer["A"]["RTO"] == "holdout":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -328,16 +319,16 @@ class CollectionManager(Operator):
             global_rto_row.operator("view3d.un_holdout_all_collections", text="", icon=icon, depress=depress)
 
         if cm.show_indirect_only:
-            indirect_all_history = rto_history["indirect_all"].get(view_layer.name, [])
+            indirect_all_history = internals.rto_history["indirect_all"].get(view_layer.name, [])
             depress = True if len(indirect_all_history) else False
             icon = 'INDIRECT_ONLY_ON'
             buffers = [False, False]
 
-            if copy_buffer["RTO"] == "indirect":
+            if internals.copy_buffer["RTO"] == "indirect":
                 icon = copy_icon
                 buffers[0] = True
 
-            if swap_buffer["A"]["RTO"] == "indirect":
+            if internals.swap_buffer["A"]["RTO"] == "indirect":
                 icon = swap_icon
                 buffers[1] = True
 
@@ -397,57 +388,57 @@ class CollectionManager(Operator):
             cm.cm_list_index = -1
 
         # check if expanded & history/buffer state still correct
-        if collection_state:
+        if internals.collection_state:
             new_state = generate_state()
 
-            if new_state["name"] != collection_state["name"]:
-                copy_buffer["RTO"] = ""
-                copy_buffer["values"].clear()
+            if new_state["name"] != internals.collection_state["name"]:
+                internals.copy_buffer["RTO"] = ""
+                internals.copy_buffer["values"].clear()
 
-                swap_buffer["A"]["RTO"] = ""
-                swap_buffer["A"]["values"].clear()
-                swap_buffer["B"]["RTO"] = ""
-                swap_buffer["B"]["values"].clear()
+                internals.swap_buffer["A"]["RTO"] = ""
+                internals.swap_buffer["A"]["values"].clear()
+                internals.swap_buffer["B"]["RTO"] = ""
+                internals.swap_buffer["B"]["values"].clear()
 
-                for name in list(expanded):
-                    laycol = layer_collections.get(name)
+                for name in list(internals.expanded):
+                    laycol = internals.layer_collections.get(name)
                     if not laycol or not laycol["has_children"]:
-                        expanded.remove(name)
+                        internals.expanded.remove(name)
 
-                for name in list(expand_history["history"]):
-                    laycol = layer_collections.get(name)
+                for name in list(internals.expand_history["history"]):
+                    laycol = internals.layer_collections.get(name)
                     if not laycol or not laycol["has_children"]:
-                        expand_history["history"].remove(name)
+                        internals.expand_history["history"].remove(name)
 
-                for rto, history in rto_history.items():
+                for rto, history in internals.rto_history.items():
                     if view_layer.name in history:
                         del history[view_layer.name]
 
 
             else:
                 for rto in ["exclude", "select", "hide", "disable", "render", "holdout", "indirect"]:
-                    if new_state[rto] != collection_state[rto]:
-                        if view_layer.name in rto_history[rto]:
-                            del rto_history[rto][view_layer.name]
+                    if new_state[rto] != internals.collection_state[rto]:
+                        if view_layer.name in internals.rto_history[rto]:
+                            del internals.rto_history[rto][view_layer.name]
 
-                        if view_layer.name in rto_history[rto+"_all"]:
-                            del rto_history[rto+"_all"][view_layer.name]
+                        if view_layer.name in internals.rto_history[rto+"_all"]:
+                            del internals.rto_history[rto+"_all"][view_layer.name]
 
         # check if in phantom mode and if it's still viable
         if cm.in_phantom_mode:
-            if layer_collections.keys() != phantom_history["initial_state"].keys():
+            if internals.layer_collections.keys() != internals.phantom_history["initial_state"].keys():
                 cm.in_phantom_mode = False
 
-            if view_layer.name != phantom_history["view_layer"]:
+            if view_layer.name != internals.phantom_history["view_layer"]:
                 cm.in_phantom_mode = False
 
             if not cm.in_phantom_mode:
-                for key, value in phantom_history.items():
+                for key, value in internals.phantom_history.items():
                     try:
                         value.clear()
                     except AttributeError:
                         if key == "view_layer":
-                            phantom_history["view_layer"] = ""
+                            internals.phantom_history["view_layer"] = ""
 
         # handle window sizing
         max_width = 960
@@ -456,14 +447,13 @@ class CollectionManager(Operator):
         width_step = 21
         qcd_width = 30
         scrollbar_width = 21
-        lvl = get_max_lvl()
 
-        width = min_width + row_indent_width + (width_step * lvl)
+        width = min_width + row_indent_width + (width_step * internals.max_lvl)
 
         if bpy.context.preferences.addons[__package__].preferences.enable_qcd:
             width += qcd_width
 
-        if len(layer_collections) > 14:
+        if len(internals.layer_collections) > 14:
             width += scrollbar_width
 
         if width > max_width:
@@ -472,31 +462,51 @@ class CollectionManager(Operator):
         return wm.invoke_popup(self, width=width)
 
     def __del__(self):
-        global collection_state
-
         if not self.window_open:
             # prevent destructor execution when changing templates
             return
 
-        collection_state.clear()
-        collection_state.update(generate_state())
+        internals.collection_state.clear()
+        internals.collection_state.update(generate_state())
 
 
 class CM_UL_items(UIList):
+    filtering = False
     last_filter_value = ""
 
     selected_objects = set()
     active_object = None
 
+    visible_items = []
+    new_collections = []
+
+    filter_name: StringProperty(
+                        name="Filter By Name",
+                        default="",
+                        description="Filter collections by name",
+                        update=lambda self, context:
+                            CM_UL_items.new_collections.clear(),
+                        )
+
+    use_filter_invert: BoolProperty(
+                        name="Invert",
+                        default=False,
+                        description="Invert filtering (show hidden items, and vice-versa)",
+                        )
+
     filter_by_selected: BoolProperty(
                         name="Filter By Selected",
                         default=False,
-                        description="Filter collections by selected items"
+                        description="Filter collections by selected items",
+                        update=lambda self, context:
+                            CM_UL_items.new_collections.clear(),
                         )
     filter_by_qcd: BoolProperty(
                         name="Filter By QCD",
                         default=False,
-                        description="Filter collections to only show QCD slots"
+                        description="Filter collections to only show QCD slots",
+                        update=lambda self, context:
+                            CM_UL_items.new_collections.clear(),
                         )
 
     def draw_item(self, context, layout, data, item, icon, active_data,active_propname, index):
@@ -505,7 +515,7 @@ class CM_UL_items(UIList):
         cm = context.scene.collection_manager
         prefs = context.preferences.addons[__package__].preferences
         view_layer = context.view_layer
-        laycol = layer_collections[item.name]
+        laycol = internals.layer_collections[item.name]
         collection = laycol["ptr"].collection
         selected_objects = CM_UL_items.selected_objects
         active_object = CM_UL_items.active_object
@@ -533,7 +543,7 @@ class CM_UL_items(UIList):
         # add expander if collection has children to make UIList act like tree view
         if laycol["has_children"]:
             if laycol["expanded"]:
-                highlight = True if expand_history["target"] == item.name else False
+                highlight = True if internals.expand_history["target"] == item.name else False
 
                 prop = row.operator("view3d.expand_sublevel", text="",
                                     icon='DISCLOSURE_TRI_DOWN',
@@ -543,7 +553,7 @@ class CM_UL_items(UIList):
                 prop.index = index
 
             else:
-                highlight = True if expand_history["target"] == item.name else False
+                highlight = True if internals.expand_history["target"] == item.name else False
 
                 prop = row.operator("view3d.expand_sublevel", text="",
                                     icon='DISCLOSURE_TRI_RIGHT',
@@ -610,7 +620,7 @@ class CM_UL_items(UIList):
 
 
         if cm.show_exclude:
-            exclude_history_base = rto_history["exclude"].get(view_layer.name, {})
+            exclude_history_base = internals.rto_history["exclude"].get(view_layer.name, {})
             exclude_target = exclude_history_base.get("target", "")
             exclude_history = exclude_history_base.get("history", [])
 
@@ -622,7 +632,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_selectable:
-            select_history_base = rto_history["select"].get(view_layer.name, {})
+            select_history_base = internals.rto_history["select"].get(view_layer.name, {})
             select_target = select_history_base.get("target", "")
             select_history = select_history_base.get("history", [])
 
@@ -635,7 +645,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_hide_viewport:
-            hide_history_base = rto_history["hide"].get(view_layer.name, {})
+            hide_history_base = internals.rto_history["hide"].get(view_layer.name, {})
             hide_target = hide_history_base.get("target", "")
             hide_history = hide_history_base.get("history", [])
 
@@ -647,7 +657,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_disable_viewport:
-            disable_history_base = rto_history["disable"].get(view_layer.name, {})
+            disable_history_base = internals.rto_history["disable"].get(view_layer.name, {})
             disable_target = disable_history_base.get("target", "")
             disable_history = disable_history_base.get("history", [])
 
@@ -660,7 +670,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_render:
-            render_history_base = rto_history["render"].get(view_layer.name, {})
+            render_history_base = internals.rto_history["render"].get(view_layer.name, {})
             render_target = render_history_base.get("target", "")
             render_history = render_history_base.get("history", [])
 
@@ -673,7 +683,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_holdout:
-            holdout_history_base = rto_history["holdout"].get(view_layer.name, {})
+            holdout_history_base = internals.rto_history["holdout"].get(view_layer.name, {})
             holdout_target = holdout_history_base.get("target", "")
             holdout_history = holdout_history_base.get("history", [])
 
@@ -686,7 +696,7 @@ class CM_UL_items(UIList):
             prop.name = item.name
 
         if cm.show_indirect_only:
-            indirect_history_base = rto_history["indirect"].get(view_layer.name, {})
+            indirect_history_base = internals.rto_history["indirect"].get(view_layer.name, {})
             indirect_target = indirect_history_base.get("target", "")
             indirect_history = indirect_history_base.get("history", [])
 
@@ -750,37 +760,72 @@ class CM_UL_items(UIList):
             subrow.prop(self, "filter_by_qcd", text="", icon='EVENT_Q')
 
     def filter_items(self, context, data, propname):
+        CM_UL_items.filtering = False
+
         flt_flags = []
         flt_neworder = []
-
         list_items = getattr(data, propname)
 
-        if self.filter_name:
-            flt_flags = filter_items_by_name_insensitive(self.filter_name, self.bitflag_filter_item, list_items)
 
-        elif self.filter_by_selected:
-            flt_flags = [0] * len(list_items)
+        if self.filter_name:
+            CM_UL_items.filtering = True
+
+            new_flt_flags = filter_items_by_name_custom(self.filter_name, self.bitflag_filter_item, list_items)
+
+            flt_flags = merge_flt_flags(flt_flags, new_flt_flags)
+
+
+        if self.filter_by_selected:
+            CM_UL_items.filtering = True
+            new_flt_flags = [0] * len(list_items)
 
             for idx, item in enumerate(list_items):
-                collection = layer_collections[item.name]["ptr"].collection
+                collection = internals.layer_collections[item.name]["ptr"].collection
 
                 # check if any of the selected objects are in the collection
                 if not set(context.selected_objects).isdisjoint(collection.objects):
-                    flt_flags[idx] |= self.bitflag_filter_item
+                    new_flt_flags[idx] = self.bitflag_filter_item
 
-        elif self.filter_by_qcd:
-            flt_flags = [0] * len(list_items)
+                # add in any recently created collections
+                if item.name in CM_UL_items.new_collections:
+                    new_flt_flags[idx] = self.bitflag_filter_item
+
+            flt_flags = merge_flt_flags(flt_flags, new_flt_flags)
+
+
+        if self.filter_by_qcd:
+            CM_UL_items.filtering = True
+            new_flt_flags = [0] * len(list_items)
 
             for idx, item in enumerate(list_items):
                 if item.qcd_slot_idx:
-                    flt_flags[idx] |= self.bitflag_filter_item
+                    new_flt_flags[idx] = self.bitflag_filter_item
 
-        else: # display as treeview
-            flt_flags = [self.bitflag_filter_item] * len(list_items)
+                # add in any recently created collections
+                if item.name in CM_UL_items.new_collections:
+                    new_flt_flags[idx] = self.bitflag_filter_item
+
+            flt_flags = merge_flt_flags(flt_flags, new_flt_flags)
+
+
+        if not CM_UL_items.filtering: # display as treeview
+            CM_UL_items.new_collections.clear()
+            flt_flags = [0] * len(list_items)
 
             for idx, item in enumerate(list_items):
-                if not layer_collections[item.name]["visible"]:
-                    flt_flags[idx] = 0
+                if internals.layer_collections[item.name]["visible"]:
+                    flt_flags[idx] = self.bitflag_filter_item
+
+
+        if self.use_filter_invert:
+            CM_UL_items.filtering = True # invert can act as pseudo filtering
+            for idx, flag in enumerate(flt_flags):
+                flt_flags[idx] = 0 if flag else self.bitflag_filter_item
+
+
+        # update visible items list
+        CM_UL_items.visible_items.clear()
+        CM_UL_items.visible_items.extend(flt_flags)
 
         return flt_flags, flt_neworder
 
@@ -873,32 +918,27 @@ class EnableAllQCDSlotsMenu(Menu):
 
 
 def view3d_header_qcd_slots(self, context):
-    global qcd_collection_state
-
     update_collection_tree(context)
 
     view_layer = context.view_layer
-
     layout = self.layout
-
     idx = 1
 
-    if qcd_collection_state:
+    if internals.qcd_collection_state:
         view_layer = context.view_layer
         new_state = generate_state(qcd=True)
 
-        if (new_state["name"] != qcd_collection_state["name"]
-        or  new_state["exclude"] != qcd_collection_state["exclude"]
-        or  new_state["exclude"] != qcd_collection_state["exclude"]
-        or  new_state["qcd"] != qcd_collection_state["qcd"]):
-            if view_layer.name in qcd_history:
-                del qcd_history[view_layer.name]
-                qcd_collection_state.clear()
+        if (new_state["name"] != internals.qcd_collection_state["name"]
+        or  new_state["exclude"] != internals.qcd_collection_state["exclude"]
+        or  new_state["qcd"] != internals.qcd_collection_state["qcd"]):
+            if view_layer.name in internals.qcd_history:
+                del internals.qcd_history[view_layer.name]
+                internals.qcd_collection_state.clear()
                 QCDAllBase.clear()
 
 
     main_row = layout.row(align=True)
-    current_qcd_history = qcd_history.get(context.view_layer.name, [])
+    current_qcd_history = internals.qcd_history.get(context.view_layer.name, [])
 
     main_row.operator_menu_hold("view3d.enable_all_qcd_slots_meta",
                                 text="",
@@ -916,10 +956,10 @@ def view3d_header_qcd_slots(self, context):
     active_object = get_move_active()
 
     for x in range(20):
-        qcd_slot_name = qcd_slots.get_name(str(x+1))
+        qcd_slot_name = internals.qcd_slots.get_name(str(x+1))
 
         if qcd_slot_name:
-            qcd_laycol = layer_collections[qcd_slot_name]["ptr"]
+            qcd_laycol = internals.layer_collections[qcd_slot_name]["ptr"]
             collection_objects = qcd_laycol.collection.objects
 
             icon_value = 0
@@ -1027,7 +1067,7 @@ def update_icon(base, icon, theme_color):
     icon.icon_pixels_float = colored_icon
 
 
-def filter_items_by_name_insensitive(pattern, bitflag, items, propname="name", flags=None, reverse=False):
+def filter_items_by_name_custom(pattern, bitflag, items, propname="name", flags=None, reverse=False):
         """
         Set FILTER_ITEM for items which name matches filter_name one (case-insensitive).
         pattern is the filtering pattern.
@@ -1060,4 +1100,14 @@ def filter_items_by_name_insensitive(pattern, bitflag, items, propname="name", f
             if bool(name and fnmatch.fnmatch(name, pattern)) is not bool(reverse):
                 flags[i] |= bitflag
 
+            # add in any recently created collections
+            if item.name in CM_UL_items.new_collections:
+                flags[i] |= bitflag
+
         return flags
+
+def merge_flt_flags(l1, l2):
+    for idx, _ in enumerate(l1):
+        l1[idx] &= l2.pop(0)
+
+    return l1 + l2

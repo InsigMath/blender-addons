@@ -26,7 +26,15 @@ from bpy.props import (
     FloatVectorProperty,
     )
 
+from . import cm_init
 from . import qcd_init
+
+def update_disable_objects_hotkeys_status(self, context):
+    if self.enable_disable_objects_override:
+        cm_init.register_disable_objects_hotkeys()
+
+    else:
+        cm_init.unregister_disable_objects_hotkeys()
 
 def update_qcd_status(self, context):
     if self.enable_qcd:
@@ -187,6 +195,17 @@ def set_tooltip_outline(self, values):
 
 class CMPreferences(AddonPreferences):
     bl_idname = __package__
+
+    # ENABLE DISABLE OBJECTS OVERRIDE
+    enable_disable_objects_override: BoolProperty(
+        name="Disable objects instead of Hiding",
+        description=(
+            "Replace the object hiding hotkeys with object disabling hotkeys and add them to the Object->Show/Hide menu.\n"
+            "Disabling objects prevents them from being automatically shown again when collections are unexcluded"
+            ),
+        default=False,
+        update=update_disable_objects_hotkeys_status,
+        )
 
     # ENABLE QCD BOOLS
     enable_qcd: BoolProperty(
@@ -426,6 +445,7 @@ class CMPreferences(AddonPreferences):
         layout = self.layout
         box = layout.box()
 
+        box.row().prop(self, "enable_disable_objects_override")
         box.row().prop(self, "enable_qcd")
 
         if not self.enable_qcd:
@@ -436,59 +456,81 @@ class CMPreferences(AddonPreferences):
 
         box.row().label(text="QCD Move Widget")
 
+        # TOOL OVERRIDES
         tool_box = box.box()
         tool_box.row().label(text="Tool Theme Overrides:")
-        tool_box.use_property_split = True
 
-        flow = tool_box.grid_flow(row_major=False, columns=2, even_columns=True, even_rows=False, align=False)
+        overrides = tool_box.split(align=True)
 
-        col = flow.column()
-        col.alignment = 'LEFT'
-
-        row = col.row(align=True)
-        row.alignment = 'RIGHT'
-        row.prop(self, "tool_text_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tool_text_override
-        row.prop(self, "qcd_ogl_widget_tool_text")
-
-        row = col.row(align=True)
-        row.alignment = 'RIGHT'
-        row.prop(self, "tool_text_sel_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tool_text_sel_override
-        row.prop(self, "qcd_ogl_widget_tool_text_sel")
-
-        col = flow.column()
+        # Column 1
+        col = overrides.column()
         col.alignment = 'RIGHT'
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "tool_inner_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tool_inner_override
-        row.prop(self, "qcd_ogl_widget_tool_inner")
+        # Text
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Text")
+        checkbox.prop(self, "tool_text_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tool_text_override
+        color_picker.prop(self, "qcd_ogl_widget_tool_text")
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "tool_inner_sel_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tool_inner_sel_override
-        row.prop(self, "qcd_ogl_widget_tool_inner_sel")
+        # Text Selection
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Selection")
+        checkbox.prop(self, "tool_text_sel_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tool_text_sel_override
+        color_picker.prop(self, "qcd_ogl_widget_tool_text_sel")
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "tool_outline_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tool_outline_override
-        row.prop(self, "qcd_ogl_widget_tool_outline")
+        # Column 2
+        col = overrides.column()
+        col.alignment = 'RIGHT'
 
-        tool_box.use_property_split = False
+        # Inner
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Inner")
+        checkbox.prop(self, "tool_inner_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tool_inner_override
+        color_picker.prop(self, "qcd_ogl_widget_tool_inner")
+
+        # Inner Selection
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Selection")
+        checkbox.prop(self, "tool_inner_sel_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tool_inner_sel_override
+        color_picker.prop(self, "qcd_ogl_widget_tool_inner_sel")
+
+        # Outline
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Outline")
+        checkbox.prop(self, "tool_outline_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tool_outline_override
+        color_picker.prop(self, "qcd_ogl_widget_tool_outline")
+
+        # Icon Alpha
         tool_box.row().label(text="Icon Alpha:")
         icon_fade_row = tool_box.row()
         icon_fade_row.alignment = 'EXPAND'
@@ -496,75 +538,103 @@ class CMPreferences(AddonPreferences):
         icon_fade_row.prop(self, "qcd_ogl_objects_icon_alpha", text="Objects")
 
 
+        # MENU BACK OVERRIDES
         menu_back_box = box.box()
-        menu_back_box.use_property_split = True
         menu_back_box.row().label(text="Menu Back Theme Overrides:")
 
-        flow = menu_back_box.grid_flow(row_major=False, columns=2, even_columns=True, even_rows=False, align=False)
+        overrides = menu_back_box.split(align=True)
 
-        col = flow.column()
-        col.alignment = 'LEFT'
-
-        row = col.row(align=True)
-        row.alignment = 'RIGHT'
-        row.prop(self, "menu_back_text_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.menu_back_text_override
-        row.prop(self, "qcd_ogl_widget_menu_back_text")
-
-        col = flow.column()
+        # Column 1
+        col = overrides.column()
         col.alignment = 'RIGHT'
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "menu_back_inner_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.menu_back_inner_override
-        row.prop(self, "qcd_ogl_widget_menu_back_inner")
+        # Text
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Text")
+        checkbox.prop(self, "menu_back_text_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.menu_back_text_override
+        color_picker.prop(self, "qcd_ogl_widget_menu_back_text")
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "menu_back_outline_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.menu_back_outline_override
-        row.prop(self, "qcd_ogl_widget_menu_back_outline")
+        # Column 2
+        col = overrides.column()
+        col.alignment = 'RIGHT'
+
+        # Inner
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Inner")
+        checkbox.prop(self, "menu_back_inner_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.menu_back_inner_override
+        color_picker.prop(self, "qcd_ogl_widget_menu_back_inner")
+
+        # Outline
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Outline")
+        checkbox.prop(self, "menu_back_outline_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.menu_back_outline_override
+        color_picker.prop(self, "qcd_ogl_widget_menu_back_outline")
 
 
+        # TOOLTIP OVERRIDES
         tooltip_box = box.box()
-        tooltip_box.use_property_split = True
         tooltip_box.row().label(text="Tooltip Theme Overrides:")
 
-        flow = tooltip_box.grid_flow(row_major=False, columns=2, even_columns=True, even_rows=False, align=False)
+        overrides = tooltip_box.split(align=True)
 
-        col = flow.column()
-        col.alignment = 'LEFT'
-
-        row = col.row(align=True)
-        row.alignment = 'RIGHT'
-        row.prop(self, "tooltip_text_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tooltip_text_override
-        row.prop(self, "qcd_ogl_widget_tooltip_text")
-
-        col = flow.column()
+        # Column 1
+        col = overrides.column()
         col.alignment = 'RIGHT'
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "tooltip_inner_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tooltip_inner_override
-        row.prop(self, "qcd_ogl_widget_tooltip_inner")
+        # Text
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Text")
+        checkbox.prop(self, "tooltip_text_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tooltip_text_override
+        color_picker.prop(self, "qcd_ogl_widget_tooltip_text")
 
-        row = col.row()
-        row.alignment = 'RIGHT'
-        row.prop(self, "tooltip_outline_override")
-        row = row.row(align=True)
-        row.alignment = 'RIGHT'
-        row.enabled = self.tooltip_outline_override
-        row.prop(self, "qcd_ogl_widget_tooltip_outline")
+        # Column 2
+        col = overrides.column()
+        col.alignment = 'RIGHT'
+
+        # Inner
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Inner")
+        checkbox.prop(self, "tooltip_inner_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tooltip_inner_override
+        color_picker.prop(self, "qcd_ogl_widget_tooltip_inner")
+
+        # Outline
+        override = col.row(align=True)
+        override.alignment = 'RIGHT'
+        checkbox = override.row(align=True)
+        checkbox.alignment = 'RIGHT'
+        checkbox.label(text="Outline")
+        checkbox.prop(self, "tooltip_outline_override", text="")
+        color_picker = override.row(align=True)
+        color_picker.alignment = 'RIGHT'
+        color_picker.enabled = self.tooltip_outline_override
+        color_picker.prop(self, "qcd_ogl_widget_tooltip_outline")

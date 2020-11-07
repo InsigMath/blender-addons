@@ -48,6 +48,7 @@ def create_mesh(gltf, mesh_idx, skin_idx):
     try:
         tmp_ob = bpy.data.objects.new('##gltf-import:tmp-object##', mesh)
         do_primitives(gltf, mesh_idx, skin_idx, mesh, tmp_ob)
+        set_extras(mesh, gltf.data.meshes[mesh_idx].extras, exclude=['targetNames'])
 
     finally:
         if tmp_ob:
@@ -90,9 +91,10 @@ def do_primitives(gltf, mesh_idx, skin_idx, mesh, ob):
         num_cols = max(i, num_cols)
 
     num_shapekeys = 0
-    for morph_i, _ in enumerate(pymesh.primitives[0].targets or []):
-        if pymesh.shapekey_names[morph_i] is not None:
-            num_shapekeys += 1
+    if len(pymesh.primitives) > 0: # Empty primitive tab is not allowed, but some invalid files...
+        for morph_i, _ in enumerate(pymesh.primitives[0].targets or []):
+            if pymesh.shapekey_names[morph_i] is not None:
+                num_shapekeys += 1
 
     # -------------
     # We'll process all the primitives gathering arrays to feed into the

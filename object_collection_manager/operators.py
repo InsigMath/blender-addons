@@ -32,17 +32,11 @@ from bpy.props import (
     IntProperty
 )
 
+# For VARS
 from . import internals
 
+# For FUNCTIONS
 from .internals import (
-    expanded,
-    layer_collections,
-    qcd_slots,
-    rto_history,
-    expand_history,
-    phantom_history,
-    copy_buffer,
-    swap_buffer,
     update_property_group,
     get_modifiers,
     get_move_selection,
@@ -52,8 +46,6 @@ from .internals import (
 )
 
 from .operator_utils import (
-    get_rto,
-    set_rto,
     apply_to_children,
     isolate_rto,
     toggle_children,
@@ -69,6 +61,8 @@ from .operator_utils import (
     set_exclude_state,
 )
 
+from . import ui
+
 class SetActiveCollection(Operator):
     '''Set the active collection'''
     bl_label = "Set Active Collection"
@@ -83,7 +77,7 @@ class SetActiveCollection(Operator):
             layer_collection = context.view_layer.layer_collection
 
         else:
-            laycol = layer_collections[self.collection_name]
+            laycol = internals.layer_collections[self.collection_name]
             layer_collection = laycol["ptr"]
 
             # set selection to this row
@@ -104,19 +98,17 @@ class ExpandAllOperator(Operator):
     bl_idname = "view3d.expand_all_items"
 
     def execute(self, context):
-        global expand_history
-
-        if len(expanded) > 0:
-            expanded.clear()
+        if len(internals.expanded) > 0:
+            internals.expanded.clear()
             context.scene.collection_manager.cm_list_index = 0
         else:
-            for laycol in layer_collections.values():
+            for laycol in internals.layer_collections.values():
                 if laycol["ptr"].children:
-                    expanded.add(laycol["name"])
+                    internals.expanded.add(laycol["name"])
 
         # clear expand history
-        expand_history["target"] = ""
-        expand_history["history"].clear()
+        internals.expand_history["target"] = ""
+        internals.expand_history["history"].clear()
 
         # update tree view
         update_property_group(context)
@@ -138,74 +130,74 @@ class ExpandSublevelOperator(Operator):
     index: IntProperty()
 
     def invoke(self, context, event):
-        global expand_history
         cls = ExpandSublevelOperator
 
         modifiers = get_modifiers(event)
 
         if modifiers == {"alt"}:
-            expand_history["target"] = ""
-            expand_history["history"].clear()
+            internals.expand_history["target"] = ""
+            internals.expand_history["history"].clear()
 
         elif modifiers == {"ctrl"}:
             # expand/collapse all subcollections
             expand = None
 
             # check whether to expand or collapse
-            if self.name in expanded:
-                expanded.remove(self.name)
+            if self.name in internals.expanded:
+                internals.expanded.remove(self.name)
                 expand = False
             else:
-                expanded.add(self.name)
+                internals.expanded.add(self.name)
                 expand = True
 
             # do expanding/collapsing
             def set_expanded(layer_collection):
                 if expand:
-                    expanded.add(layer_collection.name)
+                    internals.expanded.add(layer_collection.name)
                 else:
-                    expanded.discard(layer_collection.name)
+                    internals.expanded.discard(layer_collection.name)
 
-            apply_to_children(layer_collections[self.name]["ptr"], set_expanded)
+            apply_to_children(internals.layer_collections[self.name]["ptr"], set_expanded)
 
-            expand_history["target"] = ""
-            expand_history["history"].clear()
+            internals.expand_history["target"] = ""
+            internals.expand_history["history"].clear()
 
         elif modifiers == {"shift"}:
             def isolate_tree(current_laycol):
                 parent = current_laycol["parent"]
 
                 for laycol in parent["children"]:
-                    if laycol["name"] != current_laycol["name"] and laycol["name"] in expanded:
-                        expanded.remove(laycol["name"])
-                        expand_history["history"].append(laycol["name"])
+                    if (laycol["name"] != current_laycol["name"]
+                    and laycol["name"] in internals.expanded):
+                        internals.expanded.remove(laycol["name"])
+                        internals.expand_history["history"].append(laycol["name"])
 
                 if parent["parent"]:
                     isolate_tree(parent)
 
-            if self.name == expand_history["target"]:
-                for item in expand_history["history"]:
-                    expanded.add(item)
+            if self.name == internals.expand_history["target"]:
+                for item in internals.expand_history["history"]:
+                    internals.expanded.add(item)
 
-                expand_history["target"] = ""
-                expand_history["history"].clear()
+                internals.expand_history["target"] = ""
+                internals.expand_history["history"].clear()
 
             else:
-                expand_history["target"] = ""
-                expand_history["history"].clear()
+                internals.expand_history["target"] = ""
+                internals.expand_history["history"].clear()
 
-                isolate_tree(layer_collections[self.name])
-                expand_history["target"] = self.name
+                isolate_tree(internals.layer_collections[self.name])
+                internals.expand_history["target"] = self.name
 
         else:
             # expand/collapse collection
             if self.expand:
-                expanded.add(self.name)
+                internals.expanded.add(self.name)
             else:
-                expanded.remove(self.name)
+                internals.expanded.remove(self.name)
 
-            expand_history["target"] = ""
-            expand_history["history"].clear()
+            internals.expand_history["target"] = ""
+            internals.expand_history["history"].clear()
 
         # set the selected row to the collection you're expanding/collapsing to
         # preserve the tree view's scrolling
@@ -286,7 +278,7 @@ class CMSetCollectionOperator(Operator):
             target_collection = context.view_layer.layer_collection.collection
 
         else:
-            laycol = layer_collections[self.collection_name]
+            laycol = internals.layer_collections[self.collection_name]
             target_collection = laycol["ptr"].collection
 
         selected_objects = get_move_selection()
@@ -393,20 +385,19 @@ class CMExcludeOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMExcludeOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
         orig_active_collection = context.view_layer.active_layer_collection
         orig_active_object = context.view_layer.objects.active
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["exclude"]:
-            rto_history["exclude"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["exclude"]:
+            internals.rto_history["exclude"][view_layer] = {"target": "", "history": []}
 
         if modifiers == {"alt"}:
-            del rto_history["exclude"][view_layer]
+            del internals.rto_history["exclude"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -424,7 +415,7 @@ class CMExcludeOperator(Operator):
             # toggle exclusion
 
             # reset exclude history
-            del rto_history["exclude"][view_layer]
+            del internals.rto_history["exclude"][view_layer]
 
             set_exclude_state(laycol_ptr, not laycol_ptr.exclude)
 
@@ -439,8 +430,8 @@ class CMExcludeOperator(Operator):
                 context.view_layer.objects.active = orig_active_object
 
         # reset exclude all history
-        if view_layer in rto_history["exclude_all"]:
-            del rto_history["exclude_all"][view_layer]
+        if view_layer in internals.rto_history["exclude_all"]:
+            del internals.rto_history["exclude_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -458,19 +449,17 @@ class CMUnExcludeAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         orig_active_collection = context.view_layer.active_layer_collection
         orig_active_object = context.view_layer.objects.active
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["exclude_all"]:
-            rto_history["exclude_all"][view_layer] = []
+        if not view_layer in internals.rto_history["exclude_all"]:
+            internals.rto_history["exclude_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["exclude_all"][view_layer]
+            del internals.rto_history["exclude_all"][view_layer]
             clear_copy("exclude")
             clear_swap("exclude")
 
@@ -514,18 +503,17 @@ class CMRestrictSelectOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMRestrictSelectOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["select"]:
-            rto_history["select"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["select"]:
+            internals.rto_history["select"][view_layer] = {"target": "", "history": []}
 
         if modifiers == {"alt"}:
-            del rto_history["select"][view_layer]
+            del internals.rto_history["select"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -543,7 +531,7 @@ class CMRestrictSelectOperator(Operator):
             # toggle selectable
 
             # reset select history
-            del rto_history["select"][view_layer]
+            del internals.rto_history["select"][view_layer]
 
             # toggle selectability of collection
             laycol_ptr.collection.hide_select = not laycol_ptr.collection.hide_select
@@ -551,8 +539,8 @@ class CMRestrictSelectOperator(Operator):
             cls.isolated = False
 
         # reset select all history
-        if view_layer in rto_history["select_all"]:
-            del rto_history["select_all"][view_layer]
+        if view_layer in internals.rto_history["select_all"]:
+            del internals.rto_history["select_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -570,17 +558,15 @@ class CMUnRestrictSelectAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["select_all"]:
-            rto_history["select_all"][view_layer] = []
+        if not view_layer in internals.rto_history["select_all"]:
+            internals.rto_history["select_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["select_all"][view_layer]
+            del internals.rto_history["select_all"][view_layer]
             clear_copy("select")
             clear_swap("select")
 
@@ -616,18 +602,17 @@ class CMHideOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMHideOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["hide"]:
-            rto_history["hide"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["hide"]:
+            internals.rto_history["hide"][view_layer] = {"target": "", "history": []}
 
         if modifiers == {"alt"}:
-            del rto_history["hide"][view_layer]
+            del internals.rto_history["hide"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -645,7 +630,7 @@ class CMHideOperator(Operator):
             # toggle visible
 
             # reset hide history
-            del rto_history["hide"][view_layer]
+            del internals.rto_history["hide"][view_layer]
 
             # toggle view of collection
             laycol_ptr.hide_viewport = not laycol_ptr.hide_viewport
@@ -653,8 +638,8 @@ class CMHideOperator(Operator):
             cls.isolated = False
 
         # reset hide all history
-        if view_layer in rto_history["hide_all"]:
-            del rto_history["hide_all"][view_layer]
+        if view_layer in internals.rto_history["hide_all"]:
+            del internals.rto_history["hide_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -672,17 +657,15 @@ class CMUnHideAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["hide_all"]:
-            rto_history["hide_all"][view_layer] = []
+        if not view_layer in internals.rto_history["hide_all"]:
+            internals.rto_history["hide_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["hide_all"][view_layer]
+            del internals.rto_history["hide_all"][view_layer]
             clear_copy("hide")
             clear_swap("hide")
 
@@ -718,18 +701,17 @@ class CMDisableViewportOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMDisableViewportOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["disable"]:
-            rto_history["disable"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["disable"]:
+            internals.rto_history["disable"][view_layer] = {"target": "", "history": []}
 
         if modifiers == {"alt"}:
-            del rto_history["disable"][view_layer]
+            del internals.rto_history["disable"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -747,7 +729,7 @@ class CMDisableViewportOperator(Operator):
             # toggle disable
 
             # reset disable history
-            del rto_history["disable"][view_layer]
+            del internals.rto_history["disable"][view_layer]
 
             # toggle disable of collection in viewport
             laycol_ptr.collection.hide_viewport = not laycol_ptr.collection.hide_viewport
@@ -755,8 +737,8 @@ class CMDisableViewportOperator(Operator):
             cls.isolated = False
 
         # reset disable all history
-        if view_layer in rto_history["disable_all"]:
-            del rto_history["disable_all"][view_layer]
+        if view_layer in internals.rto_history["disable_all"]:
+            del internals.rto_history["disable_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -774,17 +756,15 @@ class CMUnDisableViewportAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["disable_all"]:
-            rto_history["disable_all"][view_layer] = []
+        if not view_layer in internals.rto_history["disable_all"]:
+            internals.rto_history["disable_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["disable_all"][view_layer]
+            del internals.rto_history["disable_all"][view_layer]
             clear_copy("disable")
             clear_swap("disable")
 
@@ -820,19 +800,18 @@ class CMDisableRenderOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMDisableRenderOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["render"]:
-            rto_history["render"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["render"]:
+            internals.rto_history["render"][view_layer] = {"target": "", "history": []}
 
 
         if modifiers == {"alt"}:
-            del rto_history["render"][view_layer]
+            del internals.rto_history["render"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -850,7 +829,7 @@ class CMDisableRenderOperator(Operator):
             # toggle renderable
 
             # reset render history
-            del rto_history["render"][view_layer]
+            del internals.rto_history["render"][view_layer]
 
             # toggle renderability of collection
             laycol_ptr.collection.hide_render = not laycol_ptr.collection.hide_render
@@ -858,8 +837,8 @@ class CMDisableRenderOperator(Operator):
             cls.isolated = False
 
         # reset render all history
-        if view_layer in rto_history["render_all"]:
-            del rto_history["render_all"][view_layer]
+        if view_layer in internals.rto_history["render_all"]:
+            del internals.rto_history["render_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -877,17 +856,15 @@ class CMUnDisableRenderAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["render_all"]:
-            rto_history["render_all"][view_layer] = []
+        if not view_layer in internals.rto_history["render_all"]:
+            internals.rto_history["render_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["render_all"][view_layer]
+            del internals.rto_history["render_all"][view_layer]
             clear_copy("render")
             clear_swap("render")
 
@@ -923,18 +900,17 @@ class CMHoldoutOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMHoldoutOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["holdout"]:
-            rto_history["holdout"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["holdout"]:
+            internals.rto_history["holdout"][view_layer] = {"target": "", "history": []}
 
         if modifiers == {"alt"}:
-            del rto_history["holdout"][view_layer]
+            del internals.rto_history["holdout"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -952,7 +928,7 @@ class CMHoldoutOperator(Operator):
             # toggle holdout
 
             # reset holdout history
-            del rto_history["holdout"][view_layer]
+            del internals.rto_history["holdout"][view_layer]
 
             # toggle holdout of collection in viewport
             laycol_ptr.holdout = not laycol_ptr.holdout
@@ -960,8 +936,8 @@ class CMHoldoutOperator(Operator):
             cls.isolated = False
 
         # reset holdout all history
-        if view_layer in rto_history["holdout_all"]:
-            del rto_history["holdout_all"][view_layer]
+        if view_layer in internals.rto_history["holdout_all"]:
+            del internals.rto_history["holdout_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -979,17 +955,15 @@ class CMUnHoldoutAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["holdout_all"]:
-            rto_history["holdout_all"][view_layer] = []
+        if not view_layer in internals.rto_history["holdout_all"]:
+            internals.rto_history["holdout_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["holdout_all"][view_layer]
+            del internals.rto_history["holdout_all"][view_layer]
             clear_copy("holdout")
             clear_swap("holdout")
 
@@ -1025,19 +999,18 @@ class CMIndirectOnlyOperator(Operator):
     isolated = False
 
     def invoke(self, context, event):
-        global rto_history
         cls = CMIndirectOnlyOperator
 
         modifiers = get_modifiers(event)
         view_layer = context.view_layer.name
-        laycol_ptr = layer_collections[self.name]["ptr"]
+        laycol_ptr = internals.layer_collections[self.name]["ptr"]
 
-        if not view_layer in rto_history["indirect"]:
-            rto_history["indirect"][view_layer] = {"target": "", "history": []}
+        if not view_layer in internals.rto_history["indirect"]:
+            internals.rto_history["indirect"][view_layer] = {"target": "", "history": []}
 
 
         if modifiers == {"alt"}:
-            del rto_history["indirect"][view_layer]
+            del internals.rto_history["indirect"][view_layer]
             cls.isolated = False
 
         elif modifiers == {"shift"}:
@@ -1055,7 +1028,7 @@ class CMIndirectOnlyOperator(Operator):
             # toggle indirect only
 
             # reset indirect history
-            del rto_history["indirect"][view_layer]
+            del internals.rto_history["indirect"][view_layer]
 
             # toggle indirect only of collection
             laycol_ptr.indirect_only = not laycol_ptr.indirect_only
@@ -1063,8 +1036,8 @@ class CMIndirectOnlyOperator(Operator):
             cls.isolated = False
 
         # reset indirect all history
-        if view_layer in rto_history["indirect_all"]:
-            del rto_history["indirect_all"][view_layer]
+        if view_layer in internals.rto_history["indirect_all"]:
+            del internals.rto_history["indirect_all"][view_layer]
 
         return {'FINISHED'}
 
@@ -1082,17 +1055,15 @@ class CMUnIndirectOnlyAllOperator(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
-        global rto_history
-
         view_layer = context.view_layer.name
         modifiers = get_modifiers(event)
 
-        if not view_layer in rto_history["indirect_all"]:
-            rto_history["indirect_all"][view_layer] = []
+        if not view_layer in internals.rto_history["indirect_all"]:
+            internals.rto_history["indirect_all"][view_layer] = []
 
         if modifiers == {"alt"}:
             # clear all states
-            del rto_history["indirect_all"][view_layer]
+            del internals.rto_history["indirect_all"][view_layer]
             clear_copy("indirect")
             clear_swap("indirect")
 
@@ -1120,11 +1091,7 @@ class CMRemoveCollectionOperator(Operator):
     collection_name: StringProperty()
 
     def execute(self, context):
-        global rto_history
-        global expand_history
-        global qcd_slots
-
-        laycol = layer_collections[self.collection_name]
+        laycol = internals.layer_collections[self.collection_name]
         collection = laycol["ptr"].collection
         parent_collection = laycol["parent"]["ptr"].collection
 
@@ -1169,22 +1136,18 @@ class CMRemoveEmptyCollectionsOperator(Operator):
         return tooltip
 
     def execute(self, context):
-        global rto_history
-        global expand_history
-        global qcd_slots
-
         if self.without_objects:
             empty_collections = [laycol["name"]
-                                for laycol in layer_collections.values()
+                                for laycol in internals.layer_collections.values()
                                 if not laycol["ptr"].collection.objects]
         else:
             empty_collections = [laycol["name"]
-                                for laycol in layer_collections.values()
+                                for laycol in internals.layer_collections.values()
                                 if not laycol["children"] and
                                 not laycol["ptr"].collection.objects]
 
         for name in empty_collections:
-            laycol = layer_collections[name]
+            laycol = internals.layer_collections[name]
             collection = laycol["ptr"].collection
             parent_collection = laycol["parent"]["ptr"].collection
 
@@ -1225,27 +1188,39 @@ class CMNewCollectionOperator(Operator):
         return tooltip
 
     def execute(self, context):
-        global rto_history
-
-        new_collection = bpy.data.collections.new('Collection')
+        new_collection = bpy.data.collections.new("New Collection")
         cm = context.scene.collection_manager
+
+        # prevent adding collections when collections are filtered
+        # and the selection is ambiguous
+        if cm.cm_list_index == -1 and ui.CM_UL_items.filtering:
+            send_report("Cannot create new collection.\n"
+                        "No collection is selected and collections are filtered."
+                       )
+            return {'CANCELLED'}
+
+        if cm.cm_list_index > -1 and not ui.CM_UL_items.visible_items[cm.cm_list_index]:
+            send_report("Cannot create new collection.\n"
+                        "The selected collection isn't visible."
+                       )
+            return {'CANCELLED'}
 
 
         # if there are collections
         if len(cm.cm_list_collection) > 0:
             if not cm.cm_list_index == -1:
                 # get selected collection
-                laycol = layer_collections[cm.cm_list_collection[cm.cm_list_index].name]
+                laycol = internals.layer_collections[cm.cm_list_collection[cm.cm_list_index].name]
 
                 # add new collection
                 if self.child:
                     laycol["ptr"].collection.children.link(new_collection)
-                    expanded.add(laycol["name"])
+                    internals.expanded.add(laycol["name"])
 
                     # update tree view property
                     update_property_group(context)
 
-                    cm.cm_list_index = layer_collections[new_collection.name]["row_index"]
+                    cm.cm_list_index = internals.layer_collections[new_collection.name]["row_index"]
 
                 else:
                     laycol["parent"]["ptr"].collection.children.link(new_collection)
@@ -1253,7 +1228,7 @@ class CMNewCollectionOperator(Operator):
                     # update tree view property
                     update_property_group(context)
 
-                    cm.cm_list_index = layer_collections[new_collection.name]["row_index"]
+                    cm.cm_list_index = internals.layer_collections[new_collection.name]["row_index"]
 
             else:
                 context.scene.collection.children.link(new_collection)
@@ -1261,7 +1236,7 @@ class CMNewCollectionOperator(Operator):
                 # update tree view property
                 update_property_group(context)
 
-                cm.cm_list_index = layer_collections[new_collection.name]["row_index"]
+                cm.cm_list_index = internals.layer_collections[new_collection.name]["row_index"]
 
         # if no collections add top level collection and select it
         else:
@@ -1274,14 +1249,17 @@ class CMNewCollectionOperator(Operator):
 
 
         # set new collection to active
-        layer_collection = layer_collections[new_collection.name]["ptr"]
+        layer_collection = internals.layer_collections[new_collection.name]["ptr"]
         context.view_layer.active_layer_collection = layer_collection
+
+        # show the new collection when collections are filtered.
+        ui.CM_UL_items.new_collections.append(new_collection.name)
 
         global rename
         rename[0] = True
 
         # reset history
-        for rto in rto_history.values():
+        for rto in internals.rto_history.values():
             rto.clear()
 
         return {'FINISHED'}
@@ -1293,9 +1271,6 @@ class CMPhantomModeOperator(Operator):
     bl_idname = "view3d.toggle_phantom_mode"
 
     def execute(self, context):
-        global phantom_history
-        global rto_history
-
         cm = context.scene.collection_manager
         view_layer = context.view_layer
 
@@ -1305,10 +1280,10 @@ class CMPhantomModeOperator(Operator):
             cm.in_phantom_mode = True
 
             # save current visibility state
-            phantom_history["view_layer"] = view_layer.name
+            internals.phantom_history["view_layer"] = view_layer.name
 
             def save_visibility_state(layer_collection):
-                phantom_history["initial_state"][layer_collection.name] = {
+                internals.phantom_history["initial_state"][layer_collection.name] = {
                             "exclude": layer_collection.exclude,
                             "select": layer_collection.collection.hide_select,
                             "hide": layer_collection.hide_viewport,
@@ -1321,15 +1296,15 @@ class CMPhantomModeOperator(Operator):
             apply_to_children(view_layer.layer_collection, save_visibility_state)
 
             # save current rto history
-            for rto, history, in rto_history.items():
+            for rto, history, in internals.rto_history.items():
                 if history.get(view_layer.name, None):
-                    phantom_history[rto+"_history"] = deepcopy(history[view_layer.name])
+                    internals.phantom_history[rto+"_history"] = deepcopy(history[view_layer.name])
 
 
 
         else: # return to normal mode
             def restore_visibility_state(layer_collection):
-                phantom_laycol = phantom_history["initial_state"][layer_collection.name]
+                phantom_laycol = internals.phantom_history["initial_state"][layer_collection.name]
 
                 layer_collection.exclude = phantom_laycol["exclude"]
                 layer_collection.collection.hide_select = phantom_laycol["select"]
@@ -1343,14 +1318,14 @@ class CMPhantomModeOperator(Operator):
 
 
             # restore previous rto history
-            for rto, history, in rto_history.items():
+            for rto, history, in internals.rto_history.items():
                 if view_layer.name in history:
                     del history[view_layer.name]
 
-                if phantom_history[rto+"_history"]:
-                    history[view_layer.name] = deepcopy(phantom_history[rto+"_history"])
+                if internals.phantom_history[rto+"_history"]:
+                    history[view_layer.name] = deepcopy(internals.phantom_history[rto+"_history"])
 
-                phantom_history[rto+"_history"].clear()
+                internals.phantom_history[rto+"_history"].clear()
 
             cm.in_phantom_mode = False
 
@@ -1366,5 +1341,47 @@ class CMApplyPhantomModeOperator(Operator):
     def execute(self, context):
         cm = context.scene.collection_manager
         cm.in_phantom_mode = False
+
+        return {'FINISHED'}
+
+
+class CMDisableObjectsOperator(Operator):
+    '''Disable selected objects in viewports'''
+    bl_label = "Disable Selected"
+    bl_idname = "view3d.disable_selected_objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for obj in context.selected_objects:
+            obj.hide_viewport = True
+
+        return {'FINISHED'}
+
+
+class CMDisableUnSelectedObjectsOperator(Operator):
+    '''Disable unselected objects in viewports'''
+    bl_label = "Disable Unselected"
+    bl_idname = "view3d.disable_unselected_objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for obj in bpy.data.objects:
+            if obj in context.visible_objects and not obj in context.selected_objects:
+                obj.hide_viewport = True
+
+        return {'FINISHED'}
+
+
+class CMRestoreDisabledObjectsOperator(Operator):
+    '''Restore disabled objects in viewports'''
+    bl_label = "Restore Disabled Objects"
+    bl_idname = "view3d.restore_disabled_objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for obj in bpy.data.objects:
+            if obj.hide_viewport:
+                obj.hide_viewport = False
+                obj.select_set(True)
 
         return {'FINISHED'}
