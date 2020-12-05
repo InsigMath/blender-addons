@@ -27,6 +27,8 @@ from ...base_generate import SubstitutionRig
 
 from itertools import repeat
 
+'''
+Due to T80764, bone name handling for 'limbs.raw_copy' was hard-coded in generate.py
 
 class Rig(SubstitutionRig):
     """ A raw copy rig, preserving the metarig bone as is, without the ORG prefix. """
@@ -37,7 +39,7 @@ class Rig(SubstitutionRig):
         new_name = self.generator.rename_org_bone(self.base_bone, new_name)
 
         return [ self.instantiate_rig(InstanceRig, new_name) ]
-
+'''
 
 class RelinkConstraintsMixin:
     """ Utilities for constraint relinking. """
@@ -68,14 +70,14 @@ class RelinkConstraintsMixin:
             if len(specs) == 1:
                 specs = repeat(specs[0])
             elif len(specs) != len(con.targets):
-                self.report_error("Constraint {} actually has {} targets", con.name, len(con.targets))
+                self.raise_error("Constraint {} actually has {} targets", con.name, len(con.targets))
 
             for tgt, spec in zip(con.targets, specs):
                 tgt.subtarget = self.find_relink_target(spec, tgt.subtarget)
 
         else:
             if len(specs) > 1:
-                self.report_error("Only the Armature constraint can have multiple '@' targets: {}", con.name)
+                self.raise_error("Only the Armature constraint can have multiple '@' targets: {}", con.name)
 
             con.subtarget = self.find_relink_target(specs[0], con.subtarget)
 
@@ -88,11 +90,11 @@ class RelinkConstraintsMixin:
             if not result:
                 result = choose_derived_bone(self.generator, old_target, spec.lower(), by_owner=False)
             if not result:
-                self.report_error("Cannot find derived {} bone of bone '{}' for relinking", spec, old_target)
+                self.raise_error("Cannot find derived {} bone of bone '{}' for relinking", spec, old_target)
             return result
         else:
             if spec not in self.obj.pose.bones:
-                self.report_error("Cannot find bone '{}' for relinking", spec)
+                self.raise_error("Cannot find bone '{}' for relinking", spec)
             return spec
 
 
@@ -119,8 +121,10 @@ class RelinkConstraintsMixin:
             r = layout.row()
             r.prop(params, "parent_bone")
 
+            layout.label(text="Constraint names have special meanings.", icon='ERROR')
 
-class InstanceRig(BaseRig, RelinkConstraintsMixin):
+
+class Rig(BaseRig, RelinkConstraintsMixin):
     def find_org_bones(self, pose_bone):
         return pose_bone.name
 
@@ -146,8 +150,8 @@ class InstanceRig(BaseRig, RelinkConstraintsMixin):
         self.add_relink_constraints_ui(layout, params)
 
 
-add_parameters = InstanceRig.add_parameters
-parameters_ui = InstanceRig.parameters_ui
+#add_parameters = InstanceRig.add_parameters
+#parameters_ui = InstanceRig.parameters_ui
 
 
 def create_sample(obj):

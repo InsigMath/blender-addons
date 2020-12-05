@@ -20,9 +20,9 @@
 
 bl_info = {
     "name": "Rigify",
-    "version": (0, 6, 1),
+    "version": (0, 6, 2),
     "author": "Nathan Vegdahl, Lucio Rossi, Ivan Cappiello, Alexander Gavrilov",
-    "blender": (2, 81, 0),
+    "blender": (2, 82, 0),
     "description": "Automatic rigging from building-block components",
     "location": "Armature properties, Bone properties, View3d tools panel, Armature Add menu",
     "doc_url": "{BLENDER_MANUAL_URL}/addons/rigging/rigify/index.html",
@@ -140,6 +140,11 @@ from bpy.props import (
 )
 
 
+class RigifyFeatureSets(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    module_name: bpy.props.StringProperty()
+
+
 class RigifyPreferences(AddonPreferences):
     # this must match the addon name, use '__package__'
     # when defining this in a submodule of a python package.
@@ -230,70 +235,101 @@ class RigifyPreferences(AddonPreferences):
             # Re-register rig parameters
             register_rig_parameters()
 
+            # Update feature set list
+            self.rigify_feature_sets.clear()
+            for s in set_list:
+                list_entry = self.rigify_feature_sets.add()
+                list_entry.name = feature_set_list.get_ui_name(s)
+                list_entry.module_name = s
+
     legacy_mode: BoolProperty(
-        name='Rigify Legacy Mode',
-        description='Select if you want to use Rigify in legacy mode',
+        name='Legacy Mode',
+        description='When enabled the add-on will run in legacy mode using the old 2.76b feature set',
         default=False,
         update=update_legacy
     )
 
-    show_expanded: BoolProperty()
-
-    show_rigs_folder_expanded: BoolProperty()
+    rigify_feature_sets: bpy.props.CollectionProperty(type=RigifyFeatureSets)
+    active_feature_set_index: IntProperty()
 
     def draw(self, context):
         layout = self.layout
-        column = layout.column()
-        box = column.box()
 
-        # first stage
-        expand = getattr(self, 'show_expanded')
-        icon = 'TRIA_DOWN' if expand else 'TRIA_RIGHT'
-        col = box.column()
-        row = col.row()
-        sub = row.row()
-        sub.context_pointer_set('addon_prefs', self)
-        sub.alignment = 'LEFT'
-        op = sub.operator('wm.context_toggle', text='', icon=icon,
-                          emboss=False)
-        op.data_path = 'addon_prefs.show_expanded'
-        sub.label(text='{}: {}'.format('Rigify', 'Enable Legacy Mode'))
-        sub = row.row()
-        sub.alignment = 'RIGHT'
-        sub.prop(self, 'legacy_mode')
+        layout.prop(self, 'legacy_mode')
 
-        if expand:
-            split = col.row().split(factor=0.15)
-            split.label(text='Description:')
-            split.label(text='When enabled the add-on will run in legacy mode using the old 2.76b feature set.')
+        if self.legacy_mode:
+            return
 
-        box = column.box()
-        rigs_expand = getattr(self, 'show_rigs_folder_expanded')
-        icon = 'TRIA_DOWN' if rigs_expand else 'TRIA_RIGHT'
-        col = box.column()
-        row = col.row()
-        sub = row.row()
-        sub.context_pointer_set('addon_prefs', self)
-        sub.alignment = 'LEFT'
-        op = sub.operator('wm.context_toggle', text='', icon=icon,
-                          emboss=False)
-        op.data_path = 'addon_prefs.show_rigs_folder_expanded'
-        sub.label(text='{}: {}'.format('Rigify', 'External feature sets'))
-        if rigs_expand:
-            for fs in feature_set_list.get_installed_list():
-                row = col.split(factor=0.8)
-                row.label(text=feature_set_list.get_ui_name(fs))
-                op = row.operator("wm.rigify_remove_feature_set", text="Remove", icon='CANCEL')
-                op.featureset = fs
-            row = col.row(align=True)
-            row.operator("wm.rigify_add_feature_set", text="Install Feature Set from File...", icon='FILEBROWSER')
 
-            split = col.row().split(factor=0.15)
-            split.label(text='Description:')
-            split.label(text='External feature sets (rigs, metarigs, ui layouts)')
+        layout.label(text="Feature Sets:")
+
+        layout.operator("wm.rigify_add_feature_set", text="Install Feature Set from File...", icon='FILEBROWSER')
 
         row = layout.row()
-        row.label(text="End of Rigify Preferences")
+        row.template_list(
+            "UI_UL_list",
+            "rigify_feature_sets",
+            self, "rigify_feature_sets",
+            self, 'active_feature_set_index'
+        )
+
+        # Clamp active index to ensure it's in bounds.
+        self.active_feature_set_index = max(0, min(self.active_feature_set_index, len(self.rigify_feature_sets)-1))
+        active_fs = self.rigify_feature_sets[self.active_feature_set_index]
+
+        if active_fs:
+            draw_feature_set_prefs(layout, context, active_fs)
+
+
+def draw_feature_set_prefs(layout, context, featureset: RigifyFeatureSets):
+    info = feature_set_list.get_info_dict(featureset.module_name)
+
+    description = featureset.name
+    if 'description' in info:
+        description = info['description']
+
+    col = layout.column()
+    split_factor = 0.15
+
+    split = col.row().split(factor=split_factor)
+    split.label(text="Description:")
+    split.label(text=description)
+
+    mod = feature_set_list.get_module_safe(featureset.module_name)
+    if mod:
+        split = col.row().split(factor=split_factor)
+        split.label(text="File:")
+        split.label(text=mod.__file__, translate=False)
+
+    if 'author' in info:
+        split = col.row().split(factor=split_factor)
+        split.label(text="Author:")
+        split.label(text=info["author"])
+
+    if 'version' in info:
+        split = col.row().split(factor=split_factor)
+        split.label(text="Version:")
+        split.label(text=".".join(str(x) for x in info['version']), translate=False)
+    if 'warning' in info:
+        split = col.row().split(factor=split_factor)
+        split.label(text="Warning:")
+        split.label(text="  " + info['warning'], icon='ERROR')
+
+    split = col.row().split(factor=split_factor)
+    split.label(text="Internet:")
+    row = split.row()
+    if 'link' in info:
+        op = row.operator('wm.url_open', text="Repository", icon='URL')
+        op.url = info['link']
+    if 'doc_url' in info:
+        op = row.operator('wm.url_open', text="Documentation", icon='HELP')
+        op.url = info['doc_url']
+    if 'tracker_url' in info:
+        op = row.operator('wm.url_open', text="Report a Bug", icon='URL')
+        op.url = info['tracker_url']
+
+    op = row.operator("wm.rigify_remove_feature_set", text="Remove", icon='CANCEL')
+    op.featureset = featureset.module_name
 
 
 class RigifyName(bpy.types.PropertyGroup):
@@ -438,7 +474,8 @@ class RigifyParameterValidator(object):
                 print("!!! PREVIOUS DEFINITION BY %s:\n\n    %s\n" % (cur_rig, format_property_spec(cur_info)))
 
         # inject a generic update callback that calls the appropriate rig classmethod
-        val[1]['update'] = update_callback(name)
+        if val[0] != bpy.props.CollectionProperty:
+            val[1]['update'] = update_callback(name)
 
         setattr(self.__params, name, val)
         self.__prop_table[name] = (self.__rig_name, new_def)
@@ -474,6 +511,7 @@ classes = (
     RigifyColorSet,
     RigifySelectionColors,
     RigifyArmatureLayer,
+    RigifyFeatureSets,
     RigifyPreferences,
 )
 
