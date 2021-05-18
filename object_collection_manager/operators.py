@@ -38,6 +38,8 @@ from . import internals
 # For FUNCTIONS
 from .internals import (
     update_property_group,
+    generate_state,
+    check_state,
     get_modifiers,
     get_move_selection,
     get_move_active,
@@ -59,6 +61,8 @@ from .operator_utils import (
     remove_collection,
     select_collection_objects,
     set_exclude_state,
+    isolate_sel_objs_collections,
+    disable_sel_objs_collections,
 )
 
 from . import ui
@@ -441,6 +445,8 @@ class CMUnExcludeAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -471,6 +477,20 @@ class CMUnExcludeAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "exclude")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "exclude", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "exclude", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "exclude")
@@ -550,6 +570,8 @@ class CMUnRestrictSelectAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -578,6 +600,20 @@ class CMUnRestrictSelectAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "select")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "select", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "select", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "select")
@@ -649,6 +685,8 @@ class CMUnHideAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -677,6 +715,20 @@ class CMUnHideAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "hide")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "hide", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "hide", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "hide")
@@ -748,6 +800,8 @@ class CMUnDisableViewportAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -776,6 +830,20 @@ class CMUnDisableViewportAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "disable")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "disable", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "disable", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "disable")
@@ -848,6 +916,8 @@ class CMUnDisableRenderAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -876,6 +946,20 @@ class CMUnDisableRenderAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "render")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "render", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "render", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "render")
@@ -947,6 +1031,8 @@ class CMUnHoldoutAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -975,6 +1061,20 @@ class CMUnHoldoutAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "holdout")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "holdout", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "holdout", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "holdout")
@@ -1047,6 +1147,8 @@ class CMUnIndirectOnlyAllOperator(Operator):
     bl_description = (
         "  * LMB - Enable all/Restore.\n"
         "  * Shift+LMB - Invert.\n"
+        "  * Shift+Ctrl+LMB - Isolate collections w/ selected objects.\n"
+        "  * Shift+Alt+LMB - Disable collections w/ selected objects.\n"
         "  * Ctrl+LMB - Copy/Paste RTOs.\n"
         "  * Ctrl+Alt+LMB - Swap RTOs.\n"
         "  * Alt+LMB - Discard history"
@@ -1075,6 +1177,20 @@ class CMUnIndirectOnlyAllOperator(Operator):
 
         elif modifiers == {"shift"}:
             invert_rtos(view_layer, "indirect")
+
+        elif modifiers == {"shift", "ctrl"}:
+            error = isolate_sel_objs_collections(view_layer, "indirect", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
+
+        elif modifiers == {"shift", "alt"}:
+            error = disable_sel_objs_collections(view_layer, "indirect", "CM")
+
+            if error:
+                self.report({"WARNING"}, error)
+                return {'CANCELLED'}
 
         else:
             activate_all_rtos(view_layer, "indirect")
@@ -1383,5 +1499,50 @@ class CMRestoreDisabledObjectsOperator(Operator):
             if obj.hide_viewport:
                 obj.hide_viewport = False
                 obj.select_set(True)
+
+        return {'FINISHED'}
+
+
+class CMUndoWrapper(Operator):
+    bl_label = "Undo"
+    bl_description = "Undo previous action"
+    bl_idname = "view3d.undo_wrapper"
+
+    @classmethod
+    def poll(self, context):
+        return bpy.ops.ed.undo.poll()
+
+    def execute(self, context):
+        internals.collection_state.clear()
+        internals.collection_state.update(generate_state())
+        bpy.ops.ed.undo()
+        update_property_group(context)
+
+        check_state(context, cm_popup=True)
+
+        # clear buffers
+        internals.copy_buffer["RTO"] = ""
+        internals.copy_buffer["values"].clear()
+
+        internals.swap_buffer["A"]["RTO"] = ""
+        internals.swap_buffer["A"]["values"].clear()
+        internals.swap_buffer["B"]["RTO"] = ""
+        internals.swap_buffer["B"]["values"].clear()
+
+        return {'FINISHED'}
+
+
+class CMRedoWrapper(Operator):
+    bl_label = "Redo"
+    bl_description = "Redo previous action"
+    bl_idname = "view3d.redo_wrapper"
+
+    @classmethod
+    def poll(self, context):
+        return bpy.ops.ed.redo.poll()
+
+    def execute(self, context):
+        bpy.ops.ed.redo()
+        update_property_group(context)
 
         return {'FINISHED'}

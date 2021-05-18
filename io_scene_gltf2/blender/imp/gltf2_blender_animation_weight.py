@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -83,3 +83,10 @@ class BlenderWeightAnim():
                     group_name="ShapeKeys",
                     interpolation=animation.samplers[channel.sampler].interpolation,
                 )
+
+                # Expand weight range if needed
+                kb = obj.data.shape_keys.key_blocks[kb_name]
+                min_weight = min(coords[1:2])
+                max_weight = max(coords[1:2])
+                if min_weight < kb.slider_min: kb.slider_min = min_weight
+                if max_weight > kb.slider_max: kb.slider_max = max_weight

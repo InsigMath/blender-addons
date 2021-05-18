@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -165,7 +165,7 @@ class BlenderGlTF():
         # Calculate names for each mesh's shapekeys
         for mesh in gltf.data.meshes or []:
             mesh.shapekey_names = []
-            used_names = set()
+            used_names = set(['Basis']) #Be sure to not use 'Basis' name at import, this is a reserved name
 
             # Some invalid glTF files has empty primitive tab
             if len(mesh.primitives) > 0:

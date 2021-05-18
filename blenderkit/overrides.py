@@ -17,12 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 
-if "bpy" in locals():
-    from importlib import reload
-
-    utils = reload(utils)
-else:
-    from blenderkit import utils
+from blenderkit import utils
 
 import bpy, mathutils
 from bpy.types import (
@@ -143,7 +138,7 @@ def modelProxy():
             bpy.ops.object.parent_set(type='OBJECT', keep_transform=True)
             return True
         else:  # TODO report this to ui
-            print('not sure what to proxify')
+            utils.p('not sure what to proxify')
     return False
 
 
@@ -176,7 +171,7 @@ def ensure_eevee_transparency(m):
 
 
 class BringToScene(Operator):
-    """Bring linked object hierarchy to scene and make it editable."""
+    """Bring linked object hierarchy to scene and make it editable"""
 
     bl_idname = "object.blenderkit_bring_to_scene"
     bl_label = "BlenderKit bring objects to scene"

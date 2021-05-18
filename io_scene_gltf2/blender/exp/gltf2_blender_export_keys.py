@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,9 @@ FILTERED_CAMERAS = 'filtered_cameras'
 
 APPLY = 'gltf_apply'
 SELECTED = 'gltf_selected'
+VISIBLE = 'gltf_visible'
+RENDERABLE = 'gltf_renderable'
+ACTIVE_COLLECTION = 'gltf_active_collection'
 SKINS = 'gltf_skins'
 DISPLACEMENT = 'gltf_displacement'
 FORCE_SAMPLING = 'gltf_force_sampling'

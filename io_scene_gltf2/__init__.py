@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 bl_info = {
     'name': 'glTF 2.0 format',
     'author': 'Julien Duroure, Scurest, Norbert Nopper, Urs Hanselmann, Moritz Becher, Benjamin Schmithüsen, Jim Eckerlein, and many external contributors',
-    "version": (1, 5, 6),
+    "version": (1, 7, 7),
     'blender': (2, 91, 0),
     'location': 'File > Import-Export',
     'description': 'Import-Export as glTF 2.0',
@@ -70,26 +70,49 @@ from bpy_extras.io_utils import ImportHelper, ExportHelper
 extension_panel_unregister_functors = []
 
 
+def ensure_filepath_matches_export_format(filepath, export_format):
+    import os
+    filename = os.path.basename(filepath)
+    if not filename:
+        return filepath
+
+    stem, ext = os.path.splitext(filename)
+    if stem.startswith('.') and not ext:
+        stem, ext = '', stem
+
+    desired_ext = '.glb' if export_format == 'GLB' else '.gltf'
+    ext_lower = ext.lower()
+    if ext_lower not in ['.glb', '.gltf']:
+        return filepath + desired_ext
+    elif ext_lower != desired_ext:
+        filepath = filepath[:-len(ext)]  # strip off ext
+        return filepath + desired_ext
+    else:
+        return filepath
+
+
 def on_export_format_changed(self, context):
-    # Update the file extension when the format (.glb/.gltf) changes
+    # Update the filename in the file browser when the format (.glb/.gltf)
+    # changes
     sfile = context.space_data
-    operator = sfile.active_operator
-    if operator.bl_idname != "EXPORT_SCENE_OT_gltf":
+    if not isinstance(sfile, bpy.types.SpaceFileBrowser):
         return
-    if operator.check(context):
-        # Weird hack to force the filepicker to notice filename changed
-        from os.path import basename
-        filepath = operator.filepath
-        bpy.ops.file.filenum(increment=-1)
-        if basename(operator.filepath) != basename(filepath):
-            bpy.ops.file.filenum(increment=1)
+    if not sfile.active_operator:
+        return
+    if sfile.active_operator.bl_idname != "EXPORT_SCENE_OT_gltf":
+        return
+
+    sfile.params.filename = ensure_filepath_matches_export_format(
+        sfile.params.filename,
+        self.export_format,
+    )
 
 
 class ExportGLTF2_Base:
     # TODO: refactor to avoid boilerplate
 
     def __init__(self):
-        from io_scene_gltf2.io.exp import gltf2_io_draco_compression_extension
+        from io_scene_gltf2.io.com import gltf2_io_draco_compression_extension
         self.is_draco_available = gltf2_io_draco_compression_extension.dll_exists()
 
     bl_options = {'PRESET'}
@@ -173,7 +196,7 @@ class ExportGLTF2_Base:
         description='Compression level (0 = most speed, 6 = most compression, higher values currently not supported)',
         default=6,
         min=0,
-        max=6
+        max=10
     )
 
     export_draco_position_quantization: IntProperty(
@@ -196,6 +219,14 @@ class ExportGLTF2_Base:
         name='Texcoord quantization bits',
         description='Quantization bits for texture coordinate values (0 = no quantization)',
         default=12,
+        min=0,
+        max=30
+    )
+
+    export_draco_color_quantization: IntProperty(
+        name='Color quantization bits',
+        description='Quantization bits for color values (0 = no quantization)',
+        default=10,
         min=0,
         max=30
     )
@@ -232,6 +263,22 @@ class ExportGLTF2_Base:
         default=True
     )
 
+    use_mesh_edges: BoolProperty(
+        name='Loose Edges',
+        description=(
+            'Export loose edges as lines, using the material from the first material slot'
+        ),
+        default=False,
+    )
+
+    use_mesh_vertices: BoolProperty(
+        name='Loose Points',
+        description=(
+            'Export loose points as glTF points, using the material from the first material slot'
+        ),
+        default=False,
+    )
+
     export_cameras: BoolProperty(
         name='Cameras',
         description='Export cameras',
@@ -248,6 +295,24 @@ class ExportGLTF2_Base:
     use_selection: BoolProperty(
         name='Selected Objects',
         description='Export selected objects only',
+        default=False
+    )
+
+    use_visible: BoolProperty(
+        name='Visible Objects',
+        description='Export visible objects only',
+        default=False
+    )
+
+    use_renderable: BoolProperty(
+        name='Renderable Objects',
+        description='Export renderable objects only',
+        default=False
+    )
+
+    use_active_collection: BoolProperty(
+        name='Active Collection',
+        description='Export objects in the active collection only',
         default=False
     )
 
@@ -374,28 +439,12 @@ class ExportGLTF2_Base:
 
     def check(self, _context):
         # Ensure file extension matches format
-        import os
-        filename = os.path.basename(self.filepath)
-        if filename:
-            filepath = self.filepath
-            desired_ext = '.glb' if self.export_format == 'GLB' else '.gltf'
-
-            stem, ext = os.path.splitext(filename)
-            if stem.startswith('.') and not ext:
-                stem, ext = '', stem
-
-            ext_lower = ext.lower()
-            if ext_lower not in ['.glb', '.gltf']:
-                filepath = filepath + desired_ext
-            elif ext_lower != desired_ext:
-                filepath = filepath[:-len(ext)]  # strip off ext
-                filepath += desired_ext
-
-            if filepath != self.filepath:
-                self.filepath = filepath
-                return True
-
-        return False
+        old_filepath = self.filepath
+        self.filepath = ensure_filepath_matches_export_format(
+            self.filepath,
+            self.export_format,
+        )
+        return self.filepath != old_filepath
 
     def invoke(self, context, event):
         settings = context.scene.get(self.scene_key)
@@ -425,14 +474,25 @@ class ExportGLTF2_Base:
             except Exception:
                 pass
 
-        self.has_active_extenions = len(extension_panel_unregister_functors) > 0
+        self.has_active_extensions = len(extension_panel_unregister_functors) > 0
         return ExportHelper.invoke(self, context, event)
 
     def save_settings(self, context):
-        # find all export_ props
+        # find all props to save
+        exceptional = [
+            # options that don't start with 'export_'
+            'use_selection',
+            'use_visible',
+            'use_renderable',
+            'use_active_collection',
+            'use_mesh_edges',
+            'use_mesh_vertices',
+        ]
         all_props = self.properties
-        export_props = {x: getattr(self, x) for x in dir(all_props)
-                        if (x.startswith("export_") or x == "use_selection") and all_props.get(x) is not None}
+        export_props = {
+            x: getattr(self, x) for x in dir(all_props)
+            if (x.startswith("export_") or x in exceptional) and all_props.get(x) is not None
+        }
 
         context.scene[self.scene_key] = export_props
 
@@ -464,6 +524,8 @@ class ExportGLTF2_Base:
         export_settings['gltf_texcoords'] = self.export_texcoords
         export_settings['gltf_normals'] = self.export_normals
         export_settings['gltf_tangents'] = self.export_tangents and self.export_normals
+        export_settings['gltf_loose_edges'] = self.use_mesh_edges
+        export_settings['gltf_loose_points'] = self.use_mesh_vertices
 
         if self.is_draco_available:
             export_settings['gltf_draco_mesh_compression'] = self.export_draco_mesh_compression_enable
@@ -471,6 +533,7 @@ class ExportGLTF2_Base:
             export_settings['gltf_draco_position_quantization'] = self.export_draco_position_quantization
             export_settings['gltf_draco_normal_quantization'] = self.export_draco_normal_quantization
             export_settings['gltf_draco_texcoord_quantization'] = self.export_draco_texcoord_quantization
+            export_settings['gltf_draco_color_quantization'] = self.export_draco_color_quantization
             export_settings['gltf_draco_generic_quantization'] = self.export_draco_generic_quantization
         else:
             export_settings['gltf_draco_mesh_compression'] = False
@@ -485,6 +548,10 @@ class ExportGLTF2_Base:
             export_settings['gltf_selected'] = self.export_selected
         else:
             export_settings['gltf_selected'] = self.use_selection
+
+        export_settings['gltf_visible'] = self.use_visible
+        export_settings['gltf_renderable'] = self.use_renderable
+        export_settings['gltf_active_collection'] = self.use_active_collection
 
         # export_settings['gltf_selected'] = self.use_selection This can be uncomment when removing compatibility of export_selected
         export_settings['gltf_layers'] = True  # self.export_layers
@@ -615,6 +682,9 @@ class GLTF_PT_export_include(bpy.types.Panel):
 
         col = layout.column(heading = "Limit to", align = True)
         col.prop(operator, 'use_selection')
+        col.prop(operator, 'use_visible')
+        col.prop(operator, 'use_renderable')
+        col.prop(operator, 'use_active_collection')
 
         col = layout.column(heading = "Data", align = True)
         col.prop(operator, 'export_extras')
@@ -676,6 +746,11 @@ class GLTF_PT_export_geometry(bpy.types.Panel):
         col.active = operator.export_normals
         col.prop(operator, 'export_tangents')
         layout.prop(operator, 'export_colors')
+
+        col = layout.column()
+        col.prop(operator, 'use_mesh_edges')
+        col.prop(operator, 'use_mesh_vertices')
+
         layout.prop(operator, 'export_materials')
         col = layout.column()
         col.active = operator.export_materials == "EXPORT"
@@ -690,7 +765,7 @@ class GLTF_PT_export_geometry_compression(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def __init__(self):
-        from io_scene_gltf2.io.exp import gltf2_io_draco_compression_extension
+        from io_scene_gltf2.io.com import gltf2_io_draco_compression_extension
         self.is_draco_available = gltf2_io_draco_compression_extension.dll_exists(quiet=True)
 
     @classmethod
@@ -719,7 +794,8 @@ class GLTF_PT_export_geometry_compression(bpy.types.Panel):
         col = layout.column(align=True)
         col.prop(operator, 'export_draco_position_quantization', text="Quantize Position")
         col.prop(operator, 'export_draco_normal_quantization', text="Normal")
-        col.prop(operator, 'export_draco_texcoord_quantization', text="Tex Coords")
+        col.prop(operator, 'export_draco_texcoord_quantization', text="Tex Coord")
+        col.prop(operator, 'export_draco_color_quantization', text="Color")
         col.prop(operator, 'export_draco_generic_quantization', text="Generic")
 
 
@@ -864,7 +940,7 @@ class GLTF_PT_export_user_extensions(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        return operator.bl_idname == "EXPORT_SCENE_OT_gltf" and operator.has_active_extenions
+        return operator.bl_idname == "EXPORT_SCENE_OT_gltf" and operator.has_active_extensions
 
     def draw(self, context):
         layout = self.layout

@@ -20,7 +20,9 @@
 
 import bpy
 
-from ...utils.naming import strip_org, strip_prefix, choose_derived_bone
+from ...utils.naming import strip_org, strip_prefix, choose_derived_bone, is_control_bone
+from ...utils.mechanism import copy_custom_properties_with_ui, move_all_constraints
+from ...utils.widgets import layout_widget_dropdown, create_registered_widget
 
 from ...base_rig import BaseRig
 from ...base_generate import SubstitutionRig
@@ -47,10 +49,24 @@ class RelinkConstraintsMixin:
     def relink_bone_constraints(self, bone_name):
         if self.params.relink_constraints:
             for con in self.get_bone(bone_name).constraints:
-                parts = con.name.split('@')
+                self.relink_single_constraint(con)
 
-                if len(parts) > 1:
-                    self.relink_constraint(con, parts[1:])
+
+    relink_unmarked_constraints = False
+
+    def relink_single_constraint(self, con):
+        if self.params.relink_constraints:
+            parts = con.name.split('@')
+
+            if len(parts) > 1:
+                self.relink_constraint(con, parts[1:])
+            elif self.relink_unmarked_constraints:
+                self.relink_constraint(con, [''])
+
+
+    def relink_move_constraints(self, from_bone, to_bone, *, prefix=''):
+        if self.params.relink_constraints:
+            move_all_constraints(self.obj, from_bone, to_bone, prefix=prefix)
 
 
     def relink_bone_parent(self, bone_name):
@@ -73,13 +89,15 @@ class RelinkConstraintsMixin:
                 self.raise_error("Constraint {} actually has {} targets", con.name, len(con.targets))
 
             for tgt, spec in zip(con.targets, specs):
-                tgt.subtarget = self.find_relink_target(spec, tgt.subtarget)
+                if tgt.target == self.obj:
+                    tgt.subtarget = self.find_relink_target(spec, tgt.subtarget)
 
-        else:
+        elif hasattr(con, 'subtarget'):
             if len(specs) > 1:
                 self.raise_error("Only the Armature constraint can have multiple '@' targets: {}", con.name)
 
-            con.subtarget = self.find_relink_target(specs[0], con.subtarget)
+            if con.target == self.obj:
+                con.subtarget = self.find_relink_target(specs[0], con.subtarget)
 
 
     def find_relink_target(self, spec, old_target):
@@ -134,12 +152,30 @@ class Rig(BaseRig, RelinkConstraintsMixin):
     def parent_bones(self):
         self.relink_bone_parent(self.bones.org)
 
+    def configure_bones(self):
+        org = self.bones.org
+        if is_control_bone(org):
+            copy_custom_properties_with_ui(self, org, org, ui_controls=[org])
+
     def rig_bones(self):
         self.relink_bone_constraints(self.bones.org)
+
+    def generate_widgets(self):
+        org = self.bones.org
+        widget = self.params.optional_widget_type
+        if widget and is_control_bone(org):
+            create_registered_widget(self.obj, org, widget)
 
     @classmethod
     def add_parameters(self, params):
         self.add_relink_constraints_params(params)
+
+        params.optional_widget_type = bpy.props.StringProperty(
+            name        = "Widget Type",
+            default     = '',
+            description = "Choose the type of the widget to create"
+        )
+
 
     @classmethod
     def parameters_ui(self, layout, params):
@@ -148,6 +184,11 @@ class Rig(BaseRig, RelinkConstraintsMixin):
         col.label(text='Manually add ORG, MCH or DEF as needed.')
 
         self.add_relink_constraints_ui(layout, params)
+
+        pbone = bpy.context.active_pose_bone
+
+        if pbone and is_control_bone(pbone.name):
+            layout_widget_dropdown(layout, params, "optional_widget_type")
 
 
 #add_parameters = InstanceRig.add_parameters

@@ -24,7 +24,7 @@ from mathutils import Vector, Matrix, Color
 from rna_prop_ui import rna_idprop_ui_prop_get
 
 from .errors import MetarigError
-from .naming import get_name, make_derived_name
+from .naming import get_name, make_derived_name, is_control_bone
 from .misc import pairwise
 
 #=======================
@@ -174,7 +174,7 @@ def copy_bone(obj, bone_name, assign_name='', *, parent=False, inherit_scale=Fal
         raise MetarigError("Cannot copy bones outside of edit mode")
 
 
-def copy_bone_properties(obj, bone_name_1, bone_name_2):
+def copy_bone_properties(obj, bone_name_1, bone_name_2, transforms=True, props=True, widget=True):
     """ Copy transform and custom properties from bone 1 to bone 2. """
     if obj.mode in {'OBJECT','POSE'}:
         # Get the pose bones
@@ -182,28 +182,26 @@ def copy_bone_properties(obj, bone_name_1, bone_name_2):
         pose_bone_2 = obj.pose.bones[bone_name_2]
 
         # Copy pose bone attributes
-        pose_bone_2.rotation_mode = pose_bone_1.rotation_mode
-        pose_bone_2.rotation_axis_angle = tuple(pose_bone_1.rotation_axis_angle)
-        pose_bone_2.rotation_euler = tuple(pose_bone_1.rotation_euler)
-        pose_bone_2.rotation_quaternion = tuple(pose_bone_1.rotation_quaternion)
+        if transforms:
+            pose_bone_2.rotation_mode = pose_bone_1.rotation_mode
+            pose_bone_2.rotation_axis_angle = tuple(pose_bone_1.rotation_axis_angle)
+            pose_bone_2.rotation_euler = tuple(pose_bone_1.rotation_euler)
+            pose_bone_2.rotation_quaternion = tuple(pose_bone_1.rotation_quaternion)
 
-        pose_bone_2.lock_location = tuple(pose_bone_1.lock_location)
-        pose_bone_2.lock_scale = tuple(pose_bone_1.lock_scale)
-        pose_bone_2.lock_rotation = tuple(pose_bone_1.lock_rotation)
-        pose_bone_2.lock_rotation_w = pose_bone_1.lock_rotation_w
-        pose_bone_2.lock_rotations_4d = pose_bone_1.lock_rotations_4d
+            pose_bone_2.lock_location = tuple(pose_bone_1.lock_location)
+            pose_bone_2.lock_scale = tuple(pose_bone_1.lock_scale)
+            pose_bone_2.lock_rotation = tuple(pose_bone_1.lock_rotation)
+            pose_bone_2.lock_rotation_w = pose_bone_1.lock_rotation_w
+            pose_bone_2.lock_rotations_4d = pose_bone_1.lock_rotations_4d
 
         # Copy custom properties
-        for key in pose_bone_1.keys():
-            if key != "_RNA_UI" \
-            and key != "rigify_parameters" \
-            and key != "rigify_type":
-                prop1 = rna_idprop_ui_prop_get(pose_bone_1, key, create=False)
-                pose_bone_2[key] = pose_bone_1[key]
-                if prop1 is not None:
-                    prop2 = rna_idprop_ui_prop_get(pose_bone_2, key, create=True)
-                    for key in prop1.keys():
-                        prop2[key] = prop1[key]
+        if props:
+            from .mechanism import copy_custom_properties
+
+            copy_custom_properties(pose_bone_1, pose_bone_2)
+
+        if widget:
+            pose_bone_2.custom_shape = pose_bone_1.custom_shape
     else:
         raise MetarigError("Cannot copy bone properties in edit mode")
 
@@ -393,9 +391,19 @@ class BoneUtilityMixin(object):
         self.register_new_bone(name, bone_name)
         return name
 
-    def copy_bone_properties(self, src_name, tgt_name):
+    def copy_bone_properties(self, src_name, tgt_name, *, props=True, ui_controls=None, **kwargs):
         """Copy pose-mode properties of the bone."""
-        copy_bone_properties(self.obj, src_name, tgt_name)
+        if props:
+            if ui_controls is None and is_control_bone(tgt_name) and hasattr(self, 'script'):
+                ui_controls = [tgt_name]
+            elif ui_controls is True:
+                ui_controls = self.bones.flatten('ctrl')
+
+        copy_bone_properties(self.obj, src_name, tgt_name, props=props and not ui_controls, **kwargs)
+
+        if props and ui_controls:
+            from .mechanism import copy_custom_properties_with_ui
+            copy_custom_properties_with_ui(self, src_name, tgt_name, ui_controls=ui_controls)
 
     def rename_bone(self, old_name, new_name):
         """Rename the bone, returning the actual new name."""
@@ -674,4 +682,4 @@ def set_bone_widget_transform(obj, bone_name, transform_bone, use_size=True, sca
         bone.custom_shape_transform = None
 
     bone.use_custom_shape_bone_size = use_size
-    bone.custom_shape_scale = scale
+    bone.custom_shape_scale_xyz = (scale, scale, scale)

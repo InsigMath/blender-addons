@@ -17,12 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 
-if "requests" in locals():
-    from importlib import reload
-
-    paths = reload(paths)
-else:
-    from blenderkit import paths
+from blenderkit import paths
 
 import requests, os, json, threading
 
@@ -48,8 +43,8 @@ def check_version(url, api_key, module):
         tempdir = paths.get_temp_dir()
 
         ver_filepath = os.path.join(tempdir, 'addon_version.json')
-        with open(ver_filepath, 'w') as s:
-            json.dump(ver_online, s, indent=4)
+        with open(ver_filepath, 'w', encoding = 'utf-8') as s:
+            json.dump(ver_online, s,  ensure_ascii=False, indent=4)
     except:
         print("couldn't check online for version updates")
 
@@ -61,7 +56,7 @@ def compare_versions(module):
 
         tempdir = paths.get_temp_dir()
         ver_filepath = os.path.join(tempdir, 'addon_version.json')
-        with open(ver_filepath, 'r') as s:
+        with open(ver_filepath, 'r',encoding='utf-8') as s:
             data = json.load(s)
 
         ver_online = data['addonVersion2.8'].split('.')

@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ class GlTF2Exporter:
             generator='Khronos glTF Blender I/O v' + get_version_string(),
             min_version=None,
             version='2.0')
-        
+
         export_user_extensions('gather_asset_hook', export_settings, asset)
 
         self.__gltf = gltf2_io.Gltf(
@@ -106,7 +106,7 @@ class GlTF2Exporter:
             gltf2_io.MaterialNormalTextureInfoClass,
             gltf2_io.MaterialOcclusionTextureInfoClass
         ]
-        
+
         self.__traverse(asset)
 
     @property
@@ -258,6 +258,10 @@ class GlTF2Exporter:
         d_key = d.get(key, {})
         d[key] = d_key
         return cls.__get_key_path(d[key], keypath, default)
+
+
+    def traverse_extensions(self):
+        self.__traverse(self.__gltf.extensions)
 
     def __traverse(self, node):
         """

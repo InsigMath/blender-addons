@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,9 @@ class BlenderScene():
     def create_animations(gltf):
         """Create animations."""
         if gltf.data.animations:
-            for anim_idx, _anim in enumerate(gltf.data.animations):
+            # NLA tracks are added bottom to top, so create animations in
+            # reverse so the first winds up on top
+            for anim_idx in reversed(range(len(gltf.data.animations))):
                 BlenderAnimation.anim(gltf, anim_idx)
 
             # Restore first animation

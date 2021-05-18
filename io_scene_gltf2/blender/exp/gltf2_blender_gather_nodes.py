@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,6 +126,19 @@ def __filter_node(blender_object, blender_scene, export_settings):
                 return False
     if export_settings[gltf2_blender_export_keys.SELECTED] and blender_object.select_get() is False:
         return False
+
+    if export_settings[gltf2_blender_export_keys.VISIBLE] and blender_object.visible_get() is False:
+        return False
+
+    # render_get() doesn't exist, so unfortunately this won't take into account the Collection settings
+    if export_settings[gltf2_blender_export_keys.RENDERABLE] and blender_object.hide_render is True:
+        return False
+
+    if export_settings[gltf2_blender_export_keys.ACTIVE_COLLECTION]:
+        found = any(x == blender_object for x in bpy.context.collection.all_objects)
+
+        if not found:
+            return False
 
     return True
 
@@ -357,6 +370,10 @@ def __gather_mesh_from_nonmesh(blender_object, library, export_settings):
                 blender_mesh_owner = blender_object
                 blender_mesh = blender_mesh_owner.to_mesh()
 
+            # In some cases (for example curve with single vertice), no blender_mesh is created (without crash)
+            if blender_mesh is None:
+                return None
+
         except Exception:
             return None
 
@@ -423,8 +440,17 @@ def __gather_trans_rot_scale(blender_object, export_settings):
     sca = __convert_swizzle_scale(sca, export_settings)
 
     if blender_object.instance_type == 'COLLECTION' and blender_object.instance_collection:
-        trans -= __convert_swizzle_location(
+        offset = -__convert_swizzle_location(
             blender_object.instance_collection.instance_offset, export_settings)
+
+        s = Matrix.Diagonal(sca).to_4x4()
+        r = rot.to_matrix().to_4x4()
+        t = Matrix.Translation(trans).to_4x4()
+        o = Matrix.Translation(offset).to_4x4()
+        m = t @ r @ s @ o
+
+        trans = m.translation
+
     translation, rotation, scale = (None, None, None)
     trans[0], trans[1], trans[2] = gltf2_blender_math.round_if_near(trans[0], 0.0), gltf2_blender_math.round_if_near(trans[1], 0.0), \
                                    gltf2_blender_math.round_if_near(trans[2], 0.0)

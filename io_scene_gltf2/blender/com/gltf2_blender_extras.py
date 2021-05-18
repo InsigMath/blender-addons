@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -89,5 +89,9 @@ def set_extras(blender_element, extras, exclude=[]):
 
         try:
             blender_element[custom_property] = value
-        except TypeError:
-            print('Error setting property %s to value of type %s' % (custom_property, type(value)))
+        except Exception:
+            # Try to convert to string
+            try:
+                blender_element[custom_property] = str(value)
+            except Exception:
+                print('Error setting property %s to value of type %s' % (custom_property, type(value)))

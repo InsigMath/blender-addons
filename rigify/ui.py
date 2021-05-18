@@ -94,6 +94,8 @@ class DATA_PT_rigify_buttons(bpy.types.Panel):
                     break
             for b in obj.pose.bones:
                 if b.rigify_type in outdated_types.keys():
+                    old_bone = b.name
+                    old_rig = b.rigify_type
                     if outdated_types[b.rigify_type]:
                         show_update_metarig = True
                     else:
@@ -106,6 +108,7 @@ class DATA_PT_rigify_buttons(bpy.types.Panel):
 
             if show_not_updatable:
                 layout.label(text="WARNING: This metarig contains deprecated rigify rig-types and cannot be upgraded automatically.", icon='ERROR')
+                layout.label(text="("+old_rig+" on bone "+old_bone+")")
                 layout.label(text="If you want to use it anyway try enabling the legacy mode before generating again.")
 
                 layout.operator("pose.rigify_switch_to_legacy", text="Switch to Legacy")
@@ -115,6 +118,7 @@ class DATA_PT_rigify_buttons(bpy.types.Panel):
             if show_update_metarig:
 
                 layout.label(text="This metarig contains old rig-types that can be automatically upgraded to benefit of rigify's new features.", icon='ERROR')
+                layout.label(text="("+old_rig+" on bone "+old_bone+")")
                 layout.label(text="To use it as-is you need to enable legacy mode.",)
                 layout.operator("pose.rigify_upgrade_types", text="Upgrade Metarig")
 
@@ -608,10 +612,10 @@ class BONE_PT_rigify_buttons(bpy.types.Panel):
         if rig_name != "":
             try:
                 rig = rig_lists.rigs[rig_name]['module']
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, KeyError):
                 row = layout.row()
                 box = row.box()
-                box.label(text="ALERT: type \"%s\" does not exist!" % rig_name)
+                box.label(text="ERROR: type \"%s\" does not exist!" % rig_name, icon='ERROR')
             else:
                 if hasattr(rig.Rig, 'parameters_ui'):
                     rig = rig.Rig
@@ -828,7 +832,7 @@ class Sample(bpy.types.Operator):
             try:
                 rig = rig_lists.rigs[self.metarig_type]["module"]
                 create_sample = rig.create_sample
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, KeyError):
                 raise Exception("rig type '" + self.metarig_type + "' has no sample.")
             else:
                 create_sample(context.active_object)
@@ -858,7 +862,7 @@ class EncodeMetarig(bpy.types.Operator):
         else:
             text_block = bpy.data.texts.new(name)
 
-        text = write_metarig(context.active_object, layers=True, func_name="create", groups=True)
+        text = write_metarig(context.active_object, layers=True, func_name="create", groups=True, widgets=True)
         text_block.write(text)
         bpy.ops.object.mode_set(mode='EDIT')
 

@@ -1,4 +1,4 @@
-# Copyright 2018-2019 The glTF-Blender-IO authors.
+# Copyright 2018-2021 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -132,18 +132,7 @@ def find_shader_image_from_shader_socket(shader_socket, max_hops=10):
     return None
 
 
-def get_texture_transform_from_texture_node(texture_node):
-    if not isinstance(texture_node, bpy.types.ShaderNodeTexImage):
-        return None
-
-    mapping_socket = texture_node.inputs["Vector"]
-    if len(mapping_socket.links) == 0:
-        return None
-
-    mapping_node = mapping_socket.links[0].from_node
-    if not isinstance(mapping_node, bpy.types.ShaderNodeMapping):
-        return None
-
+def get_texture_transform_from_mapping_node(mapping_node):
     if mapping_node.vector_type not in ["TEXTURE", "POINT", "VECTOR"]:
         gltf2_io_debug.print_console("WARNING",
             "Skipping exporting texture transform because it had type " +

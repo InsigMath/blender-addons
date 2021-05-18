@@ -16,15 +16,8 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-if "bpy" in locals():
-    from importlib import reload
 
-    paths = reload(paths)
-    utils = reload(utils)
-    tasks_queue = reload(tasks_queue)
-    rerequests = reload(rerequests)
-else:
-    from blenderkit import paths, utils, tasks_queue, rerequests
+from blenderkit import paths, utils, tasks_queue, rerequests, ui, colors
 
 import requests
 import json
@@ -34,6 +27,9 @@ import time
 
 import shutil
 import threading
+import logging
+
+bk_logger = logging.getLogger('blenderkit')
 
 
 def count_to_parent(parent):
@@ -65,6 +61,32 @@ def filter_categories(categories):
         filter_category(category)
 
 
+def get_category_path(categories, category):
+    '''finds the category in all possible subcategories and returns the path to it'''
+    category_path = []
+    check_categories = categories[:]
+    parents = {}
+    while len(check_categories) > 0:
+        ccheck = check_categories.pop()
+        #        print(ccheck['name'])
+        if not ccheck.get('children'):
+            continue
+
+        for ch in ccheck['children']:
+            #                print(ch['name'])
+            parents[ch['slug']] = ccheck['slug']
+
+            if ch['slug'] == category:
+                category_path = [ch['slug']]
+                slug = ch['slug']
+                while parents.get(slug):
+                    slug = parents.get(slug)
+
+                    category_path.insert(0, slug)
+                return category_path
+            check_categories.append(ch)
+
+
 def get_category(categories, cat_path=()):
     for category in cat_path:
         for c in categories:
@@ -73,6 +95,75 @@ def get_category(categories, cat_path=()):
                 if category == cat_path[-1]:
                     return (c)
                 break;
+
+
+# def get_upload_asset_type(self):
+#     typemapper = {
+#         bpy.types.Object.blenderkit: 'model',
+#         bpy.types.Scene.blenderkit: 'scene',
+#         bpy.types.Image.blenderkit: 'hdr',
+#         bpy.types.Material.blenderkit: 'material',
+#         bpy.types.Brush.blenderkit: 'brush'
+#     }
+#     asset_type = typemapper[type(self)]
+#     return asset_type
+
+def update_category_enums(self, context):
+    '''Fixes if lower level is empty - sets it to None, because enum value can be higher.'''
+    enums = get_subcategory_enums(self, context)
+    if enums[0][0] == 'NONE' and self.subcategory != 'NONE':
+        self.subcategory = 'NONE'
+
+
+def update_subcategory_enums(self, context):
+    '''Fixes if lower level is empty - sets it to None, because enum value can be higher.'''
+    enums = get_subcategory1_enums(self, context)
+    if enums[0][0] == 'NONE' and self.subcategory1 != 'NONE':
+        self.subcategory1 = 'NONE'
+
+
+def get_category_enums(self, context):
+    wm = bpy.context.window_manager
+    props = bpy.context.scene.blenderkitUI
+    asset_type = props.asset_type.lower()
+    # asset_type = self.asset_type#get_upload_asset_type(self)
+    asset_categories = get_category(wm['bkit_categories'], cat_path=(asset_type,))
+    items = []
+    for c in asset_categories['children']:
+        items.append((c['slug'], c['name'], c['description']))
+    if len(items) == 0:
+        items.append(('NONE', '', 'no categories on this level defined'))
+    return items
+
+
+def get_subcategory_enums(self, context):
+    wm = bpy.context.window_manager
+    props = bpy.context.scene.blenderkitUI
+    asset_type = props.asset_type.lower()
+    items = []
+    if self.category != '':
+        asset_categories = get_category(wm['bkit_categories'], cat_path=(asset_type, self.category,))
+        for c in asset_categories['children']:
+            items.append((c['slug'], c['name'], c['description']))
+    if len(items) == 0:
+        items.append(('NONE', '', 'no categories on this level defined'))
+    # print('subcategory', items)
+    return items
+
+
+def get_subcategory1_enums(self, context):
+    wm = bpy.context.window_manager
+    props = bpy.context.scene.blenderkitUI
+    asset_type = props.asset_type.lower()
+    items = []
+    if self.category != '' and self.subcategory != '':
+        asset_categories = get_category(wm['bkit_categories'], cat_path=(asset_type, self.category, self.subcategory,))
+        if asset_categories:
+            for c in asset_categories['children']:
+                items.append((c['slug'], c['name'], c['description']))
+    if len(items) == 0:
+        items.append(('NONE', '', 'no categories on this level defined'))
+    return items
 
 
 def copy_categories():
@@ -95,55 +186,62 @@ def load_categories():
 
     wm = bpy.context.window_manager
     try:
-        with open(categories_filepath, 'r') as catfile:
+        with open(categories_filepath, 'r', encoding='utf-8') as catfile:
             wm['bkit_categories'] = json.load(catfile)
 
         wm['active_category'] = {
             'MODEL': ['model'],
             'SCENE': ['scene'],
+            'HDR': ['hdr'],
             'MATERIAL': ['material'],
             'BRUSH': ['brush'],
         }
     except:
         print('categories failed to read')
 
+
 #
 catfetch_counter = 0
 
 
-def fetch_categories(API_key, force = False):
+def fetch_categories(API_key, force=False):
     url = paths.get_api_url() + 'categories/'
 
     headers = utils.get_headers(API_key)
 
     tempdir = paths.get_temp_dir()
     categories_filepath = os.path.join(tempdir, 'categories.json')
-    catfile_age = time.time() - os.path.getmtime(categories_filepath)
+    if os.path.exists(categories_filepath):
+        catfile_age = time.time() - os.path.getmtime(categories_filepath)
+    else:
+        catfile_age = 10000000
 
     # global catfetch_counter
     # catfetch_counter += 1
-    # utils.p('fetching categories: ', catfetch_counter)
-    # utils.p('age of cat file', catfile_age)
+    # bk_logger.debug('fetching categories: ', catfetch_counter)
+    # bk_logger.debug('age of cat file', catfile_age)
     try:
         # read categories only once per day maximum, or when forced to do so.
         if catfile_age > 86400 or force:
-            utils.p('requesting categories')
+            bk_logger.debug('requesting categories from server')
             r = rerequests.get(url, headers=headers)
             rdata = r.json()
             categories = rdata['results']
             fix_category_counts(categories)
             # filter_categories(categories) #TODO this should filter categories for search, but not for upload. by now off.
-            with open(categories_filepath, 'w') as s:
-                json.dump(categories, s, indent=4)
+            with open(categories_filepath, 'w', encoding='utf-8') as s:
+                json.dump(categories, s, ensure_ascii=False, indent=4)
         tasks_queue.add_task((load_categories, ()))
     except Exception as e:
-        utils.p('category fetching failed')
-        utils.p(e)
+        t = 'BlenderKit failed to download fresh categories from the server'
+        tasks_queue.add_task((ui.add_report,(t, 15, colors.RED)))
+        bk_logger.debug(t)
+        bk_logger.exception(e)
         if not os.path.exists(categories_filepath):
             source_path = paths.get_addon_file(subpath='data' + os.sep + 'categories.json')
             shutil.copy(source_path, categories_filepath)
 
 
-def fetch_categories_thread(API_key, force = False):
+def fetch_categories_thread(API_key, force=False):
     cat_thread = threading.Thread(target=fetch_categories, args=([API_key, force]), daemon=True)
     cat_thread.start()

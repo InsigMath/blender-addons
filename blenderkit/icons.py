@@ -27,8 +27,24 @@ icon_collections = {}
 icons_read = {
     'fp.png': 'free',
     'flp.png': 'full',
+    'trophy.png': 'trophy',
+    'dumbbell.png': 'dumbbell',
+    'cc0.png': 'cc0',
+    'royalty_free.png': 'royalty_free',
 }
 
+verification_icons = {
+    'vs_ready.png':'ready',
+    'vs_deleted.png':'deleted' ,
+    'vs_uploaded.png': 'uploaded',
+    'vs_uploading.png': 'uploading',
+    'vs_on_hold.png': 'on_hold',
+    'vs_validated.png': 'validated',
+    'vs_rejected.png': 'rejected'
+
+}
+
+icons_read.update(verification_icons)
 
 def register_icons():
     # Note that preview collections returned by bpy.utils.previews
@@ -44,7 +60,13 @@ def register_icons():
     for ir in icons_read.keys():
         pcoll.load(icons_read[ir], os.path.join(icons_dir, ir), 'IMAGE')
 
+        # iprev = pcoll.new(icons_read[ir])
+        # img = bpy.data.images.load(os.path.join(icons_dir, ir))
+        # iprev.image_size = (img.size[0], img.size[1])
+        # iprev.image_pixels_float = img.pixels[:]
+
     icon_collections["main"] = pcoll
+    icon_collections["previews"] = bpy.utils.previews.new()
 
 
 def unregister_icons():

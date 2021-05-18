@@ -19,45 +19,100 @@
 bl_info = {
     "name": "BlenderKit Online Asset Library",
     "author": "Vilem Duha, Petr Dlouhy",
-    "version": (1, 0, 32),
-    "blender": (2, 83, 0),
+    "version": (2, 93, 0),
+    "blender": (2, 93, 0),
     "location": "View3D > Properties > BlenderKit",
     "description": "Online BlenderKit library (materials, models, brushes and more). Connects to the internet.",
     "warning": "",
-    "doc_url": "{BLENDER_MANUAL_URL}/addons/add_mesh/blenderkit.html",
+    "doc_url": "{BLENDER_MANUAL_URL}/addons/3d_view/blenderkit.html",
     "category": "3D View",
 }
 
 if "bpy" in locals():
     from importlib import reload
 
+    # alphabetically sorted all add-on modules since reload only happens from __init__.
+    # modules with _bg are used for background computations in separate blender instance and that's why they don't need reload.
+
+    append_link = reload(append_link)
+    asset_bar_op = reload(asset_bar_op)
     asset_inspector = reload(asset_inspector)
-    search = reload(search)
-    download = reload(download)
-    upload = reload(upload)
-    ratings = reload(ratings)
     autothumb = reload(autothumb)
-    ui = reload(ui)
-    icons = reload(icons)
     bg_blender = reload(bg_blender)
-    paths = reload(paths)
-    utils = reload(utils)
-    overrides = reload(overrides)
-    ui_panels = reload(ui_panels)
-    categories = reload(categories)
     bkit_oauth = reload(bkit_oauth)
+    categories = reload(categories)
+    colors = reload(colors)
+    download = reload(download)
+    icons = reload(icons)
+    image_utils = reload(image_utils)
+    oauth = reload(oauth)
+    overrides = reload(overrides)
+    paths = reload(paths)
+    ratings = reload(ratings)
+    ratings_utils = reload(ratings_utils)
+    resolutions = reload(resolutions)
+    search = reload(search)
     tasks_queue = reload(tasks_queue)
+    ui = reload(ui)
+    ui_bgl = reload(ui_bgl)
+    ui_panels = reload(ui_panels)
+    upload = reload(upload)
+    upload_bg = reload(upload_bg)
+    utils = reload(utils)
+
+    bl_ui_label = reload(bl_ui_label)
+    bl_ui_button = reload(bl_ui_button)
+    # bl_ui_checkbox = reload(bl_ui_checkbox)
+    # bl_ui_slider = reload(bl_ui_slider)
+    # bl_ui_up_down = reload(bl_ui_up_down)
+    bl_ui_drag_panel = reload(bl_ui_drag_panel)
+    bl_ui_draw_op = reload(bl_ui_draw_op)
+    # bl_ui_textbox = reload(bl_ui_textbox)
+
 else:
-    from blenderkit import asset_inspector, search, download, upload, ratings, autothumb, ui, icons, bg_blender, paths, \
-        utils, \
-        overrides, ui_panels, categories, bkit_oauth, tasks_queue
+    from blenderkit import append_link
+    from blenderkit import asset_bar_op
+    from blenderkit import asset_inspector
+    from blenderkit import autothumb
+    from blenderkit import bg_blender
+    from blenderkit import bkit_oauth
+    from blenderkit import categories
+    from blenderkit import colors
+    from blenderkit import download
+    from blenderkit import icons
+    from blenderkit import image_utils
+    from blenderkit import oauth
+    from blenderkit import overrides
+    from blenderkit import paths
+    from blenderkit import ratings
+    from blenderkit import ratings_utils
+    from blenderkit import resolutions
+    from blenderkit import search
+    from blenderkit import tasks_queue
+    from blenderkit import ui
+    from blenderkit import ui_bgl
+    from blenderkit import ui_panels
+    from blenderkit import upload
+    from blenderkit import upload_bg
+    from blenderkit import utils
+
+    from blenderkit.bl_ui_widgets import bl_ui_label
+    from blenderkit.bl_ui_widgets import bl_ui_button
+    # from blenderkit.bl_ui_widgets import bl_ui_checkbox
+    # from blenderkit.bl_ui_widgets import bl_ui_slider
+    # from blenderkit.bl_ui_widgets import bl_ui_up_down
+    from blenderkit.bl_ui_widgets import bl_ui_drag_panel
+    from blenderkit.bl_ui_widgets import bl_ui_draw_op
+    # from blenderkit.bl_ui_widgets import bl_ui_textbox
 
 import os
 import math
 import time
-# import logging
+import logging
 import bpy
 import pathlib
+
+log = logging.getLogger(__name__)
 
 from bpy.app.handlers import persistent
 import bpy.utils.previews
@@ -86,7 +141,10 @@ from bpy.types import (
 
 @persistent
 def scene_load(context):
-    search.load_previews()
+    print('loading in background')
+    print(bpy.context.window_manager)
+    if not bpy.app.background:
+        search.load_previews()
     ui_props = bpy.context.scene.blenderkitUI
     ui_props.assetbar_on = False
     ui_props.turn_off = False
@@ -108,29 +166,25 @@ def check_timers_timer():
     return 5.0
 
 
-licenses = (
-    ('royalty_free', 'Royalty Free', 'royalty free commercial license'),
-    ('cc_zero', 'Creative Commons Zero', 'Creative Commons Zero'),
-)
 conditions = (
-    ('UNSPECIFIED', 'Unspecified', "Don't use this in search"),
+    ('UNSPECIFIED', 'Unspecified', ""),
     ('NEW', 'New', 'Shiny new item'),
     ('USED', 'Used', 'Casually used item'),
     ('OLD', 'Old', 'Old item'),
     ('DESOLATE', 'Desolate', 'Desolate item - dusty & rusty'),
 )
 model_styles = (
-    ('REALISTIC', 'Realistic', "photo realistic model"),
-    ('PAINTERLY', 'Painterly', 'hand painted with visible strokes, mostly for games'),
+    ('REALISTIC', 'Realistic', "Photo realistic model"),
+    ('PAINTERLY', 'Painterly', 'Hand painted with visible strokes'),
     ('LOWPOLY', 'Lowpoly', "Lowpoly art -don't mix up with polycount!"),
     ('ANIME', 'Anime', 'Anime style'),
     ('2D_VECTOR', '2D Vector', '2D vector'),
     ('3D_GRAPHICS', '3D Graphics', '3D graphics'),
-    ('OTHER', 'Other', 'Other style'),
+    ('OTHER', 'Other', 'Other styles'),
 )
 search_model_styles = (
-    ('REALISTIC', 'Realistic', "photo realistic model"),
-    ('PAINTERLY', 'Painterly', 'hand painted with visible strokes, mostly for games'),
+    ('REALISTIC', 'Realistic', "Photo realistic model"),
+    ('PAINTERLY', 'Painterly', 'Hand painted with visible strokes'),
     ('LOWPOLY', 'Lowpoly', "Lowpoly art -don't mix up with polycount!"),
     ('ANIME', 'Anime', 'Anime style'),
     ('2D_VECTOR', '2D Vector', '2D vector'),
@@ -139,20 +193,20 @@ search_model_styles = (
     ('ANY', 'Any', 'Any Style'),
 )
 material_styles = (
-    ('REALISTIC', 'Realistic', "photo realistic model"),
-    ('NPR', 'Non photorealistic', 'hand painted with visible strokes, mostly for games'),
+    ('REALISTIC', 'Realistic', "Photo realistic model"),
+    ('NPR', 'Non photorealistic', 'Hand painted with visible strokes'),
     ('OTHER', 'Other', 'Other style'),
 )
 search_material_styles = (
-    ('REALISTIC', 'Realistic', "photo realistic model"),
-    ('NPR', 'Non photorealistic', 'hand painted with visible strokes, mostly for games'),
+    ('REALISTIC', 'Realistic', "Photo realistic model"),
+    ('NPR', 'Non photorealistic', 'Hand painted with visible strokes'),
     ('ANY', 'Any', 'Any'),
 )
 engines = (
-    ('CYCLES', 'Cycles', 'blender cycles pathtracer'),
-    ('EEVEE', 'Eevee', 'blender eevee renderer'),
-    ('OCTANE', 'Octane', 'octane render enginge'),
-    ('ARNOLD', 'Arnold', 'arnold render engine'),
+    ('CYCLES', 'Cycles', 'Blender Cycles'),
+    ('EEVEE', 'Eevee', 'Blender eevee renderer'),
+    ('OCTANE', 'Octane', 'Octane render enginge'),
+    ('ARNOLD', 'Arnold', 'Arnold render engine'),
     ('V-RAY', 'V-Ray', 'V-Ray renderer'),
     ('UNREAL', 'Unreal', 'Unreal engine'),
     ('UNITY', 'Unity', 'Unity engine'),
@@ -175,80 +229,50 @@ mesh_poly_types = (
     ('OTHER', 'other', ''),
 )
 
-thumbnail_angles = (
-    ('DEFAULT', 'default', ''),
-    ('FRONT', 'front', ''),
-    ('SIDE', 'side', ''),
-    ('TOP', 'top', ''),
-)
-
-thumbnail_snap = (
-    ('GROUND', 'ground', ''),
-    ('WALL', 'wall', ''),
-    ('CEILING', 'ceiling', ''),
-    ('FLOAT', 'floating', ''),
-)
-
-thumbnail_resolutions = (
-    ('256', '256', ''),
-    ('512', '512 - minimum for public', ''),
-    ('1024', '1024', ''),
-    ('2048', '2048', ''),
-)
 
 
-def get_upload_asset_type(self):
-    typemapper = {
-        BlenderKitModelUploadProps: 'model',
-        BlenderKitSceneUploadProps: 'scene',
-        BlenderKitMaterialUploadProps: 'material',
-        BlenderKitBrushUploadProps: 'brush'
-    }
-    asset_type = typemapper[type(self)]
-    return asset_type
 
 
-def get_subcategory_enums(self, context):
+
+
+def udate_down_up(self, context):
+    """Perform a search if results are empty."""
+    s = context.scene
     wm = bpy.context.window_manager
-    asset_type = get_upload_asset_type(self)
-    items = []
-    if self.category != '':
-        asset_categories = categories.get_category(wm['bkit_categories'], cat_path=(asset_type, self.category,))
-        for c in asset_categories['children']:
-            items.append((c['slug'], c['name'], c['description']))
-
-    return items
-
-
-def get_category_enums(self, context):
-    wm = bpy.context.window_manager
-    asset_type = get_upload_asset_type(self)
-    asset_categories = categories.get_category(wm['bkit_categories'], cat_path=(asset_type,))
-    items = []
-    for c in asset_categories['children']:
-        items.append((c['slug'], c['name'], c['description']))
-    return items
+    props = s.blenderkitUI
+    if wm.get('search results') == None and props.down_up == 'SEARCH':
+        search.search()
 
 
 def switch_search_results(self, context):
     s = bpy.context.scene
+    wm = bpy.context.window_manager
     props = s.blenderkitUI
     if props.asset_type == 'MODEL':
-        s['search results'] = s.get('bkit model search')
-        s['search results orig'] = s.get('bkit model search orig')
+        wm['search results'] = wm.get('bkit model search')
+        wm['search results orig'] = wm.get('bkit model search orig')
     elif props.asset_type == 'SCENE':
-        s['search results'] = s.get('bkit scene search')
-        s['search results orig'] = s.get('bkit scene search orig')
+        wm['search results'] = wm.get('bkit scene search')
+        wm['search results orig'] = wm.get('bkit scene search orig')
+    elif props.asset_type == 'HDR':
+        wm['search results'] = wm.get('bkit hdr search')
+        wm['search results orig'] = wm.get('bkit hdr search orig')
     elif props.asset_type == 'MATERIAL':
-        s['search results'] = s.get('bkit material search')
-        s['search results orig'] = s.get('bkit material search orig')
+        wm['search results'] = wm.get('bkit material search')
+        wm['search results orig'] = wm.get('bkit material search orig')
     elif props.asset_type == 'TEXTURE':
-        s['search results'] = s.get('bkit texture search')
-        s['search results orig'] = s.get('bkit texture search orig')
+        wm['search results'] = wm.get('bkit texture search')
+        wm['search results orig'] = wm.get('bkit texture search orig')
     elif props.asset_type == 'BRUSH':
-        s['search results'] = s.get('bkit brush search')
-        s['search results orig'] = s.get('bkit brush search orig')
+        wm['search results'] = wm.get('bkit brush search')
+        wm['search results orig'] = wm.get('bkit brush search orig')
+        if not (context.sculpt_object or context.image_paint_object):
+            ui.add_report(
+                'Switch to paint or sculpt mode to search in BlenderKit brushes.')
+
     search.load_previews()
+    if wm['search results'] == None and props.down_up == 'SEARCH':
+        search.search()
 
 
 def asset_type_callback(self, context):
@@ -257,22 +281,28 @@ def asset_type_callback(self, context):
     items for Enum property, depending on the down_up property - BlenderKit is either in search or in upload mode.
 
     '''
+    user_preferences = bpy.context.preferences.addons['blenderkit'].preferences
+
     if self.down_up == 'SEARCH':
         items = (
-            ('MODEL', 'Models', 'Find models in the BlenderKit online database', 'OBJECT_DATAMODE', 0),
-            # ('SCENE', 'SCENE', 'Browse scenes', 'SCENE_DATA', 1),
-            ('MATERIAL', 'Materials', 'Find materials in the BlenderKit online database', 'MATERIAL', 2),
+            ('MODEL', 'Models', 'Find models', 'OBJECT_DATAMODE', 0),
+            ('MATERIAL', 'Materials', 'Find materials', 'MATERIAL', 2),
             # ('TEXTURE', 'Texture', 'Browse textures', 'TEXTURE', 3),
-            ('BRUSH', 'Brushes', 'Find brushes in the BlenderKit online database', 'BRUSH_DATA', 3)
+            ('SCENE', 'Scenes', 'Find scenes', 'SCENE_DATA', 3),
+            ('HDR', 'HDRs', 'Find HDRs', 'WORLD', 4),
+            ('BRUSH', 'Brushes', 'Find brushes', 'BRUSH_DATA', 5)
         )
     else:
         items = (
-            ('MODEL', 'Model', 'Upload a model to BlenderKit', 'OBJECT_DATAMODE', 0),
+            ('MODEL', 'Model', 'Upload a model', 'OBJECT_DATAMODE', 0),
             # ('SCENE', 'SCENE', 'Browse scenes', 'SCENE_DATA', 1),
-            ('MATERIAL', 'Material', 'Upload a material to BlenderKit', 'MATERIAL', 2),
+            ('MATERIAL', 'Material', 'Upload a material', 'MATERIAL', 2),
             # ('TEXTURE', 'Texture', 'Browse textures', 'TEXTURE', 3),
-            ('BRUSH', 'Brush', 'Upload a brush to BlenderKit', 'BRUSH_DATA', 3)
+            ('SCENE', 'Scene', 'Upload a scene', 'SCENE_DATA', 3),
+            ('HDR', 'HDR', 'Upload a HDR', 'WORLD', 4),
+            ('BRUSH', 'Brush', 'Upload a brush', 'BRUSH_DATA', 5)
         )
+
     return items
 
 
@@ -280,20 +310,23 @@ class BlenderKitUIProps(PropertyGroup):
     down_up: EnumProperty(
         name="Download vs Upload",
         items=(
-            ('SEARCH', 'Search', 'Sctivate searching', 'VIEWZOOM', 0),
+            ('SEARCH', 'Search', 'Activate searching', 'VIEWZOOM', 0),
             ('UPLOAD', 'Upload', 'Activate uploading', 'COPYDOWN', 1),
             # ('RATING', 'Rating', 'Activate rating', 'SOLO_ON', 2)
         ),
-        description="BLenderKit",
+        description="BlenderKit",
         default="SEARCH",
+        update=udate_down_up
     )
     asset_type: EnumProperty(
         name="BlenderKit Active Asset Type",
         items=asset_type_callback,
-        description="Activate asset in UI",
+        description="",
         default=None,
         update=switch_search_results
     )
+
+    asset_type_fold:  BoolProperty(name="Expand asset types", default=False)
     # these aren't actually used ( by now, seems to better use globals in UI module:
     draw_tooltip: BoolProperty(name="Draw Tooltip", default=False)
     addon_update: BoolProperty(name="Should Update Addon", default=False)
@@ -389,6 +422,15 @@ class BlenderKitUIProps(PropertyGroup):
     dragging_rating_work_hours: BoolProperty(name="Dragging Rating Work Hours", default=False)
     last_rating_time: FloatProperty(name="Last Rating Time", default=0.0)
 
+    hdr_upload_image: PointerProperty(name='Upload HDR',
+                                      type=bpy.types.Image,
+                                      description='Pick an image to upload')
+
+    # StringProperty(
+    # name="Upload HDR",
+    # description="Active HDR image to upload",
+    # default="")
+
 
 def search_procedural_update(self, context):
     if self.search_procedural in ('PROCEDURAL', 'BOTH'):
@@ -416,7 +458,7 @@ class BlenderKitCommonSearchProps(object):
 
     # TEXTURE RESOLUTION
     search_texture_resolution: BoolProperty(name="Texture Resolution",
-                                            description="Span of the texture resolutions",
+                                            description="Limit texture resolutions",
                                             default=False,
                                             update=search.search_update,
                                             )
@@ -438,7 +480,7 @@ class BlenderKitCommonSearchProps(object):
 
     # file_size
     search_file_size: BoolProperty(name="File Size",
-                                   description="Span of the file sizes",
+                                   description="Limit file sizes",
                                    default=False,
                                    update=search.search_update,
                                    )
@@ -479,7 +521,7 @@ class BlenderKitCommonSearchProps(object):
             ('UPLOADING', 'Uploading', 'Uploading'),
             ('UPLOADED', 'Uploaded', 'Uploaded'),
             ('READY', 'Ready for V.', 'Ready for validation (deprecated since 2.8)'),
-            ('VALIDATED', 'Validated', 'Calidated'),
+            ('VALIDATED', 'Validated', 'Validated'),
             ('ON_HOLD', 'On Hold', 'On Hold'),
             ('REJECTED', 'Rejected', 'Rejected'),
             ('DELETED', 'Deleted', 'Deleted'),
@@ -488,54 +530,74 @@ class BlenderKitCommonSearchProps(object):
         update=search.search_update,
     )
 
+    # resolution download/import settings
+    resolution: EnumProperty(
+        name="Max resolution",
+        description="Cap texture sizes in the file to this resolution",
+        items=
+        (
+            # ('256', '256x256', ''),
+            ('512', '512x512', ''),
+            ('1024', '1024x1024', ''),
+            ('2048', '2048x2048', ''),
+            ('4096', '4096x4096', ''),
+            ('8192', '8192x8192', ''),
+            ('ORIGINAL', 'ORIGINAL FILE', ''),
+
+        ),
+        default='1024',
+    )
+    free_only: BoolProperty(name="Free first", description="Show free models first",
+                            default=False, update=search.search_update)
+
+    unpack_files: BoolProperty(name="Unpack Files",
+                               description="Unpack files after download",
+                               default=True
+                               )
+
+    unrated_only: BoolProperty(name="Unrated only", description="Show only unrated models",
+                               default=False, update=search.search_update)
+
 
 def name_update(self, context):
     ''' checks for name change, because it decides if whole asset has to be re-uploaded. Name is stored in the blend file
     and that's the reason.'''
-    utils.name_update()
-
-
-def update_tags(self, context):
-    props = utils.get_upload_props()
-
-    commasep = props.tags.split(',')
-    ntags = []
-    for tag in commasep:
-        if len(tag) > 19:
-            short_tags = tag.split(' ')
-            for short_tag in short_tags:
-                if len(short_tag) > 19:
-                    short_tag = short_tag[:18]
-                ntags.append(short_tag)
-        else:
-            ntags.append(tag)
-    if len(ntags) == 1:
-        ntags = ntags[0].split(' ')
-    ns = ''
-    for t in ntags:
-        if t != '':
-            ns += t + ','
-    ns = ns[:-1]
-    if props.tags != ns:
-        props.tags = ns
+    utils.name_update(self)
 
 
 def update_free(self, context):
-    if self.is_free == False:
-        self.is_free = True
-        title = "All BlenderKit materials are free"
-        message = "Any material uploaded to BlenderKit is free." \
-                  " However, it can still earn money for the author," \
-                  " based on our fair share system. " \
-                  "Part of subscription is sent to artists based on usage by paying users."
+    if self.is_free == 'FULL':
+        self.is_free = 'FREE'
+        ui_panels.ui_message(title="All BlenderKit materials are free",
+                             message="Any material uploaded to BlenderKit is free." \
+                                     " However, it can still earn money for the author," \
+                                     " based on our fair share system. " \
+                                     "Part of subscription is sent to artists based on usage by paying users.\n")
 
-        def draw_message(self, context):
-            utils.label_multiline(self.layout, text=message, icon='NONE', width=-1)
+# common_upload_props = [
+#     {
+#         'identifier':'id',
+#         'name':"Asset Version Id",
+#         'type':'StringProperty',
+#         'description':'Unique name of the asset version(hidden)',
+#         'default':''
+# }
+# {
+#         'identifier':'id',
+#         'name':"Asset Version Id",
+#         'type':'StringProperty',
+#         'description':'Unique name of the asset version(hidden)',
+#         'default':''
+# }
+# ]
 
-        bpy.context.window_manager.popup_menu(draw_message, title=title, icon='INFO')
+
 
 
 class BlenderKitCommonUploadProps(object):
+    # for p in common_upload_props:
+    #     exec(f"{p['identifier']}: {p['type']}(name='{p['name']}',description='{p['description']}',default='{p['default']}')")
+
     id: StringProperty(
         name="Asset Version Id",
         description="Unique name of the asset version(hidden)",
@@ -565,7 +627,7 @@ class BlenderKitCommonUploadProps(object):
         name="Tags",
         description="List of tags, separated by commas (optional)",
         default="",
-        update=update_tags
+        update=utils.update_tags
     )
 
     name_changed: BoolProperty(name="Name Changed",
@@ -574,7 +636,7 @@ class BlenderKitCommonUploadProps(object):
 
     pbr: BoolProperty(name="Pure PBR Compatible",
                       description="Is compatible with PBR standard. This means only image textures are used with no"
-                                  " procedurals and no color correction, only pbr shader is used",
+                                  " procedurals and no color correction, only principled shader is used",
                       default=False)
 
     pbr_type: EnumProperty(
@@ -584,7 +646,7 @@ class BlenderKitCommonUploadProps(object):
         default="METALLIC",
     )
     license: EnumProperty(
-        items=licenses,
+        items=upload.licenses,
         default='royalty_free',
         description='License. Please read our help for choosing the right licenses',
     )
@@ -592,16 +654,18 @@ class BlenderKitCommonUploadProps(object):
     is_private: EnumProperty(
         name="Thumbnail Style",
         items=(
-            ('PRIVATE', 'Private', "You asset will be hidden to public. The private assets are limited by a quota."),
-            ('PUBLIC', 'Public', '"Your asset will go into the validation process automatically')
+            ('PRIVATE', 'Private', ""),
+            ('PUBLIC', 'Public', "")
         ),
-        description="If not marked private, your asset will go into the validation process automatically\n"
-                    "Private assets are limited by quota.",
+        description="Public assets go into the validation process. \n"
+                    "Validated assets are visible to all users.\n"
+                    "Private assets are limited by your plan quota\n"
+                    "State",
         default="PUBLIC",
     )
 
     is_procedural: BoolProperty(name="Procedural",
-                                description="Asset is procedural - has no texture.",
+                                description="Asset is procedural - has no texture",
                                 default=True
                                 )
     node_count: IntProperty(name="Node count", description="Total nodes in the asset", default=0)
@@ -610,12 +674,18 @@ class BlenderKitCommonUploadProps(object):
 
     # is_private: BoolProperty(name="Asset is Private",
     #                       description="If not marked private, your asset will go into the validation process automatically\n"
-    #                                   "Private assets are limited by quota.",
+    #                                   "Private assets are limited by quota",
     #                       default=False)
 
-    is_free: BoolProperty(name="Free for Everyone",
-                          description="You consent you want to release this asset as free for everyone",
-                          default=False)
+    is_free: EnumProperty(
+        name="Thumbnail Style",
+        items=(
+            ('FULL', 'Full', "Your asset will be only available for subscribers"),
+            ('FREE', 'Free', "You consent you want to release this asset as free for everyone.")
+        ),
+        description="Assets can be in Free or in Full plan. Also free assets generate credits.",
+        default="FULL",
+    )
 
     uploading: BoolProperty(name="Uploading",
                             description="True when background process is running",
@@ -632,7 +702,7 @@ class BlenderKitCommonUploadProps(object):
     thumbnail_generating_state: StringProperty(
         name="Thumbnail Generating State",
         description="bg process reports for thumbnail generation",
-        default='Please add thumbnail(jpg, at least 512x512)')
+        default='Please add thumbnail(jpg or png, at least 512x512)')
 
     report: StringProperty(
         name="Missing Upload Properties",
@@ -642,12 +712,19 @@ class BlenderKitCommonUploadProps(object):
     category: EnumProperty(
         name="Category",
         description="main category to put into",
-        items=get_category_enums
+        items=categories.get_category_enums,
+        update=categories.update_category_enums
     )
     subcategory: EnumProperty(
         name="Subcategory",
-        description="main category to put into",
-        items=get_subcategory_enums
+        description="Subcategory to put into",
+        items=categories.get_subcategory_enums,
+        update=categories.update_subcategory_enums
+    )
+    subcategory1: EnumProperty(
+        name="Subcategory lvl2",
+        description="Subcategory to put into",
+        items=categories.get_subcategory1_enums
     )
 
 
@@ -656,20 +733,20 @@ class BlenderKitRatingProps(PropertyGroup):
                                 description="quality of the material",
                                 default=0,
                                 min=-1, max=10,
-                                update=ratings.update_ratings_quality)
+                                update=ratings_utils.update_ratings_quality)
 
     # the following enum is only to ease interaction - enums support 'drag over' and enable to draw the stars easily.
     rating_quality_ui: EnumProperty(name='rating_quality_ui',
-                                    items=ratings.stars_enum_callback,
+                                    items=ratings_utils.stars_enum_callback,
                                     description='Rating stars 0 - 10',
                                     default=None,
-                                    update=ratings.update_quality_ui,
+                                    update=ratings_utils.update_quality_ui,
                                     )
 
     rating_work_hours: FloatProperty(name="Work Hours",
                                      description="How many hours did this work take?",
                                      default=0.00,
-                                     min=0.0, max=1000, update=ratings.update_ratings_work_hours
+                                     min=0.0, max=150, update=ratings_utils.update_ratings_work_hours
                                      )
 
     # rating_complexity: IntProperty(name="Complexity",
@@ -725,6 +802,16 @@ class BlenderKitMaterialSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
         default="",
         update=search.search_update,
     )
+    append_method: EnumProperty(
+        name="Import Method",
+        items=(
+            ('LINK', 'Link', "Link Material - will be in external file and can't be directly edited"),
+            ('APPEND', 'Append', 'Append if you need to edit the material'),
+        ),
+        description="Appended materials are editable in your scene. Linked assets are saved in original files, "
+                    "aren't editable directly, but also don't increase your file size",
+        default="APPEND"
+    )
     automap: BoolProperty(name="Auto-Map",
                           description="reset object texture space and also add automatically a cube mapped UV "
                                       "to the object. \n this allows most materials to apply instantly to any mesh",
@@ -761,10 +848,19 @@ class BlenderKitMaterialUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
         default="",
     )
 
-    is_free: BoolProperty(name="Free for Everyone",
-                          description="You consent you want to release this asset as free for everyone",
-                          default=True, update=update_free
-                          )
+    is_free: EnumProperty(
+        name="Thumbnail Style",
+        items=(
+            ('FULL', 'Full', "Your asset will be only available for subscribers."),
+            ('FREE', 'Free', "You consent you want to release this asset as free for everyone.")
+        ),
+        description="Assets can be in Free or in Full plan. Also free assets generate credits. \n"
+                    "All BlenderKit materials are free.",
+        default="FREE",
+        update=update_free
+    )
+
+
 
     uv: BoolProperty(name="Needs UV", description="needs an UV set", default=False)
     # printable_3d : BoolProperty( name = "3d printable", description = "can be 3d printed", default = False)
@@ -774,22 +870,24 @@ class BlenderKitMaterialUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
     texture_resolution_max: IntProperty(name="Texture Resolution Max", description="texture resolution maximum",
                                         default=0)
 
-    texture_size_meters: FloatProperty(name="Texture Size in Meters", description="face count, autofilled",
+    texture_size_meters: FloatProperty(name="Texture Size in Meters", description="Size of texture in real world units.",
                                        default=1.0, min=0)
 
     thumbnail_scale: FloatProperty(name="Thumbnail Object Size",
-                                   description="size of material preview object in meters "
-                                               "- change for materials that look better at sizes different than 1m",
+                                   description="Size of material preview object in meters."
+                                               "Change for materials that look better at sizes different than 1m",
                                    default=1, min=0.00001, max=10)
     thumbnail_background: BoolProperty(name="Thumbnail Background (for Glass only)",
-                                       description="For refractive materials, you might need a background. "
-                                                   "Don't use if thumbnail looks good without it!",
+                                       description="For refractive materials, you might need a background.\n"
+                                                   "Don't use for other types of materials.\n"
+                                                   "Transparent background is preferred",
                                        default=False)
     thumbnail_background_lightness: FloatProperty(name="Thumbnail Background Lightness",
-                                                  description="set to make your material stand out", default=.9,
+                                                  description="Set to make your material stand out with enough contrast",
+                                                  default=.9,
                                                   min=0.00001, max=1)
     thumbnail_samples: IntProperty(name="Cycles Samples",
-                                   description="cycles samples setting", default=150,
+                                   description="Cycles samples", default=100,
                                    min=5, max=5000)
     thumbnail_denoising: BoolProperty(name="Use Denoising",
                                       description="Use denoising", default=True)
@@ -798,9 +896,9 @@ class BlenderKitMaterialUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
 
     thumbnail_resolution: EnumProperty(
         name="Resolution",
-        items=thumbnail_resolutions,
-        description="Thumbnail resolution.",
-        default="512",
+        items=autothumb.thumbnail_resolutions,
+        description="Thumbnail resolution",
+        default="1024",
     )
 
     thumbnail_generator_type: EnumProperty(
@@ -818,7 +916,9 @@ class BlenderKitMaterialUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
 
     thumbnail: StringProperty(
         name="Thumbnail",
-        description="Path to the thumbnail - 512x512 .jpg image",
+        description="Thumbnail path - 512x512 .jpg image, rendered with cycles. \n"
+                    "Only standard BlenderKit previews will be accepted.\n"
+                    "Only exception are special effects like fire or similar.",
         subtype='FILE_PATH',
         default="",
         update=autothumb.update_upload_material_preview)
@@ -855,6 +955,11 @@ class BlenderKitBrushSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
         default="",
         update=search.search_update
     )
+
+
+class BlenderKitHDRUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
+    texture_resolution_max: IntProperty(name="Texture Resolution Max", description="texture resolution maximum",
+                                        default=0)
 
 
 class BlenderKitBrushUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
@@ -898,9 +1003,9 @@ class BlenderKitModelUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
             ('TEMPLATE', 'Template', 'Asset intended to help in creation of something else'),
         ),
         default='FINISHED',
-        description='Production state of the asset, \n also template should be actually finished, \n'
-                    'just the nature of it can be a template, like a thumbnailer scene, \n '
-                    'finished mesh topology as start for modelling or similar',
+        description='Production state of the asset. \n'
+                    'Templates should be tools to finish certain tasks, like a thumbnailer scene, \n '
+                    'finished mesh topology as start for modelling or others',
     )
 
     engine_other: StringProperty(
@@ -930,7 +1035,7 @@ class BlenderKitModelUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
 
     manufacturer: StringProperty(
         name="Manufacturer",
-        description="Manufacturer, company making a design peace or product. Not you",
+        description="Manufacturer, company making a design piece or product. Not you",
         default="",
     )
 
@@ -954,38 +1059,40 @@ class BlenderKitModelUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
 
     thumbnail: StringProperty(
         name="Thumbnail",
-        description="Path to the thumbnail - 512x512 .jpg image",
+        description="Thumbnail path - 512x512 .jpg\n"
+                    "Rendered with cycles",
+
         subtype='FILE_PATH',
         default="",
         update=autothumb.update_upload_model_preview)
 
     thumbnail_background_lightness: FloatProperty(name="Thumbnail Background Lightness",
-                                                  description="set to make your material stand out", default=.9,
+                                                  description="set to make your material stand out", default=1.0,
                                                   min=0.01, max=10)
 
     thumbnail_angle: EnumProperty(
         name='Thumbnail Angle',
-        items=thumbnail_angles,
+        items=autothumb.thumbnail_angles,
         default='DEFAULT',
         description='thumbnailer angle',
     )
 
     thumbnail_snap_to: EnumProperty(
         name='Model Snaps To:',
-        items=thumbnail_snap,
+        items=autothumb.thumbnail_snap,
         default='GROUND',
         description='typical placing of the interior. Leave on ground for most objects that respect gravity :)',
     )
 
     thumbnail_resolution: EnumProperty(
         name="Resolution",
-        items=thumbnail_resolutions,
-        description="Thumbnail resolution.",
-        default="512",
+        items=autothumb.thumbnail_resolutions,
+        description="Thumbnail resolution",
+        default="1024",
     )
 
     thumbnail_samples: IntProperty(name="Cycles Samples",
-                                   description="cycles samples setting", default=200,
+                                   description="cycles samples setting", default=100,
                                    min=5, max=5000)
     thumbnail_denoising: BoolProperty(name="Use Denoising",
                                       description="Use denoising", default=True)
@@ -1140,7 +1247,8 @@ class BlenderKitSceneUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
 
     thumbnail: StringProperty(
         name="Thumbnail",
-        description="Path to the thumbnail - 512x512 .jpg image",
+        description="Thumbnail path - 512x512 .jpg\n"
+                    "Rendered with cycles",
         subtype='FILE_PATH',
         default="",
         update=autothumb.update_upload_scene_preview)
@@ -1195,9 +1303,9 @@ class BlenderKitSceneUploadProps(PropertyGroup, BlenderKitCommonUploadProps):
         default=(.25, .25, .5),
     )
 
-    texture_resolution_min: IntProperty(name="Texture Eesolution Min",
+    texture_resolution_min: IntProperty(name="Texture Resolution Min",
                                         description="texture resolution min, autofilled", default=0)
-    texture_resolution_max: IntProperty(name="Texture Eesolution Max",
+    texture_resolution_max: IntProperty(name="Texture Resolution Max",
                                         description="texture resolution max, autofilled", default=0)
 
     pbr: BoolProperty(name="PBR Compatible", description="Is compatible with PBR standard", default=False)
@@ -1261,9 +1369,6 @@ class BlenderKitModelSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
         update=search.search_update
     )
 
-    free_only: BoolProperty(name="Free only", description="Show only free models",
-                            default=False, update=search.search_update)
-
     # CONDITION
     search_condition: EnumProperty(
         items=conditions,
@@ -1281,7 +1386,8 @@ class BlenderKitModelSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
 
     # DESIGN YEAR
     search_design_year: BoolProperty(name="Sesigned in Year",
-                                     description="When the object was approximately designed",
+                                     description="When the object was approximately designed. \n"
+                                                 "Useful for search of historical or future objects",
                                      default=False,
                                      update=search.search_update,
                                      )
@@ -1302,19 +1408,19 @@ class BlenderKitModelSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
 
     # POLYCOUNT
     search_polycount: BoolProperty(name="Use Polycount",
-                                   description="Use polycount of object search tag",
+                                   description="Limit polycount",
                                    default=False,
                                    update=search.search_update, )
 
     search_polycount_min: IntProperty(name="Min Polycount",
-                                      description="Minimum poly count of the asset",
+                                      description="Minimum poly count",
                                       default=0,
                                       min=0,
                                       max=100000000,
                                       update=search.search_update, )
 
     search_polycount_max: IntProperty(name="Max Polycount",
-                                      description="Maximum poly count of the asset",
+                                      description="Maximum poly count",
                                       default=100000000,
                                       min=0,
                                       max=100000000,
@@ -1329,7 +1435,7 @@ class BlenderKitModelSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
         ),
         description="Appended objects are editable in your scene. Linked assets are saved in original files, "
                     "aren't editable but also don't increase your file size",
-        default="LINK_COLLECTION"
+        default="APPEND_OBJECTS"
     )
     append_link: EnumProperty(
         name="How to Attach",
@@ -1373,15 +1479,24 @@ class BlenderKitModelSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
                                         subtype='ANGLE')
 
     perpendicular_snap: BoolProperty(name='Perpendicular snap',
-                                     description="Limit snapping that is close to perpendicular angles to be perpendicular.",
+                                     description="Limit snapping that is close to perpendicular angles to be perpendicular",
                                      default=True)
 
     perpendicular_snap_threshold: FloatProperty(name="Threshold",
-                                                description="Limit perpendicular snap to be below these values.",
+                                                description="Limit perpendicular snap to be below these values",
                                                 default=.25,
                                                 min=0,
                                                 max=.5,
                                                 )
+
+
+class BlenderKitHDRSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
+    search_keywords: StringProperty(
+        name="Search",
+        description="Search for these keywords",
+        default="",
+        update=search.search_update
+    )
 
 
 class BlenderKitSceneSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
@@ -1394,7 +1509,7 @@ class BlenderKitSceneSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
     search_style: EnumProperty(
         name="Style",
         items=search_model_styles,
-        description="keywords defining style (realistic, painted, polygonal, other)",
+        description="Restrict search for style",
         default="ANY",
         update=search.search_update
     )
@@ -1412,9 +1527,22 @@ class BlenderKitSceneSearchProps(PropertyGroup, BlenderKitCommonSearchProps):
     )
     search_engine_other: StringProperty(
         name="Engine",
-        description="engine not specified by addon",
+        description="Engine not specified by addon",
         default="",
         update=search.search_update
+    )
+    append_link: EnumProperty(
+        name="Append or link",
+        items=(
+            ('LINK', 'Link', ''),
+            ('APPEND', 'Append', ''),
+        ),
+        description="choose if the scene will be linked or appended",
+        default="APPEND"
+    )
+    switch_after_append: BoolProperty(
+        name='Switch to scene after download',
+        default=False
     )
 
 
@@ -1430,15 +1558,10 @@ def fix_subdir(self, context):
     if self.project_subdir != pp:
         self.project_subdir = pp
 
-        title = "Fixed to relative path"
-        message = "This path should be always realative.\n" \
-                  " It's a directory BlenderKit creates where your .blend is \n " \
-                  "and uses it for storing assets."
-
-        def draw_message(self, context):
-            utils.label_multiline(self.layout, text=message, icon='NONE', width=400)
-
-        bpy.context.window_manager.popup_menu(draw_message, title=title, icon='INFO')
+        ui_panels.ui_message(title="Fixed to relative path",
+                             message="This path should be always realative.\n" \
+                                     " It's a directory BlenderKit creates where your .blend is \n " \
+                                     "and uses it for storing assets.")
 
 
 class BlenderKitAddonPreferences(AddonPreferences):
@@ -1460,7 +1583,7 @@ class BlenderKitAddonPreferences(AddonPreferences):
 
     api_key_refresh: StringProperty(
         name="BlenderKit refresh API Key",
-        description="API key used to refresh the token regularly.",
+        description="API key used to refresh the token regularly",
         default="",
         subtype="PASSWORD",
     )
@@ -1479,7 +1602,7 @@ class BlenderKitAddonPreferences(AddonPreferences):
 
     refresh_in_progress: BoolProperty(
         name="Api key refresh in progress",
-        description="Api key is currently being refreshed. Don't refresh it again.",
+        description="Api key is currently being refreshed. Don't refresh it again",
         default=False
     )
 
@@ -1542,7 +1665,7 @@ class BlenderKitAddonPreferences(AddonPreferences):
         default="BOTH",
     )
     thumbnail_use_gpu: BoolProperty(
-        name="Use GPU for Thumbnails Rendering",
+        name="Use GPU for Thumbnails Rendering (For assets upload)",
         description="By default this is off so you can continue your work without any lag",
         default=False
     )
@@ -1586,8 +1709,22 @@ class BlenderKitAddonPreferences(AddonPreferences):
 
     use_timers: BoolProperty(
         name="Use timers",
-        description="Use timers for BlenderKit. Usefull for debugging since timers seem to be unstable.",
+        description="Use timers for BlenderKit. Usefull for debugging since timers seem to be unstable",
         default=True,
+        update=utils.save_prefs
+    )
+
+    experimental_features: BoolProperty(
+        name="Enable experimental features",
+        description="Enable all experimental features of BlenderKit. Use at your own risk.",
+        default=False,
+        update=utils.save_prefs
+    )
+
+    categories_fix: BoolProperty(
+        name="Enable category fixing mode",
+        description="Enable category fixing mode.",
+        default=False,
         update=utils.save_prefs
     )
 
@@ -1622,15 +1759,18 @@ class BlenderKitAddonPreferences(AddonPreferences):
         layout.prop(self, "project_subdir")
         # layout.prop(self, "temp_dir")
         layout.prop(self, "directory_behaviour")
-        layout.prop(self, "thumbnail_use_gpu")
         # layout.prop(self, "allow_proximity")
         # layout.prop(self, "panel_behaviour")
         layout.prop(self, "thumb_size")
         layout.prop(self, "max_assetbar_rows")
         layout.prop(self, "tips_on_start")
         layout.prop(self, "search_in_header")
+        layout.prop(self, "thumbnail_use_gpu")
+
         if bpy.context.preferences.view.show_developer_ui:
             layout.prop(self, "use_timers")
+            layout.prop(self, "experimental_features")
+            layout.prop(self, "categories_fix")
 
 
 # registration
@@ -1644,6 +1784,9 @@ classes = (
 
     BlenderKitSceneSearchProps,
     BlenderKitSceneUploadProps,
+
+    BlenderKitHDRSearchProps,
+    BlenderKitHDRUploadProps,
 
     BlenderKitMaterialUploadProps,
     BlenderKitMaterialSearchProps,
@@ -1680,6 +1823,14 @@ def register():
     bpy.types.Scene.bkit_ratings = PointerProperty(  # for uploads, not now...
         type=BlenderKitRatingProps)
 
+    # HDRs
+    bpy.types.Scene.blenderkit_HDR = PointerProperty(
+        type=BlenderKitHDRSearchProps)
+    bpy.types.Image.blenderkit = PointerProperty(  # for uploads, not now...
+        type=BlenderKitHDRUploadProps)
+    bpy.types.Image.bkit_ratings = PointerProperty(  # for uploads, not now...
+        type=BlenderKitRatingProps)
+
     # MATERIALS
     bpy.types.Scene.blenderkit_mat = PointerProperty(
         type=BlenderKitMaterialSearchProps)
@@ -1710,6 +1861,7 @@ def register():
     overrides.register_overrides()
     bkit_oauth.register()
     tasks_queue.register()
+    asset_bar_op.register()
 
     user_preferences = bpy.context.preferences.addons['blenderkit'].preferences
     if user_preferences.use_timers:
@@ -1741,14 +1893,17 @@ def unregister():
     overrides.unregister_overrides()
     bkit_oauth.unregister()
     tasks_queue.unregister()
+    asset_bar_op.unregister()
 
     del bpy.types.Scene.blenderkit_models
     del bpy.types.Scene.blenderkit_scene
+    del bpy.types.Scene.blenderkit_HDR
     del bpy.types.Scene.blenderkit_brush
     del bpy.types.Scene.blenderkit_mat
 
     del bpy.types.Scene.blenderkit
     del bpy.types.Object.blenderkit
+    del bpy.types.Image.blenderkit
     del bpy.types.Material.blenderkit
     del bpy.types.Brush.blenderkit
 

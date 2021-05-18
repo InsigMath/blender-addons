@@ -17,20 +17,19 @@
 # ##### END GPL LICENSE BLOCK #####
 
 
-if "bpy" in locals():
-    from importlib import reload
-
-    paths = reload(paths)
-    rerequests = reload(rerequests)
-
-else:
-    from blenderkit import paths, rerequests
+from blenderkit import paths, rerequests, image_utils
 
 import bpy
 from mathutils import Vector
 import json
 import os
 import sys
+import shutil
+import logging
+import traceback
+import inspect
+
+bk_logger = logging.getLogger('blenderkit')
 
 ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
 BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
@@ -38,6 +37,11 @@ HIGH_PRIORITY_CLASS = 0x00000080
 IDLE_PRIORITY_CLASS = 0x00000040
 NORMAL_PRIORITY_CLASS = 0x00000020
 REALTIME_PRIORITY_CLASS = 0x00000100
+
+
+def experimental_enabled():
+    preferences = bpy.context.preferences.addons['blenderkit'].preferences
+    return preferences.experimental_features
 
 
 def get_process_flags():
@@ -73,6 +77,13 @@ def get_active_model():
             ob = ob.parent
         return ob
     return None
+
+
+def get_active_HDR():
+    scene = bpy.context.scene
+    ui_props = scene.blenderkitUI
+    image = ui_props.hdr_upload_image
+    return image
 
 
 def get_selected_models():
@@ -130,6 +141,8 @@ def get_selected_replace_adepts():
     # if no blenderkit - like objects were found, use the original selection.
     if len(parents) == 0:
         parents = obs
+    pprint('replace adepts')
+    pprint(str(parents))
     return parents
 
 
@@ -147,6 +160,10 @@ def get_search_props():
         if not hasattr(scene, 'blenderkit_scene'):
             return;
         props = scene.blenderkit_scene
+    if uiprops.asset_type == 'HDR':
+        if not hasattr(scene, 'blenderkit_HDR'):
+            return;
+        props = scene.blenderkit_HDR
     if uiprops.asset_type == 'MATERIAL':
         if not hasattr(scene, 'blenderkit_mat'):
             return;
@@ -164,6 +181,27 @@ def get_search_props():
     return props
 
 
+def get_active_asset_by_type(asset_type = 'model'):
+    asset_type =asset_type.lower()
+    if asset_type == 'model':
+        if bpy.context.view_layer.objects.active is not None:
+            ob = get_active_model()
+            return ob
+    if asset_type == 'scene':
+        return bpy.context.scene
+    if asset_type == 'hdr':
+        return get_active_HDR()
+    if asset_type == 'material':
+        if bpy.context.view_layer.objects.active is not None and bpy.context.active_object.active_material is not None:
+            return bpy.context.active_object.active_material
+    if asset_type == 'texture':
+        return None
+    if asset_type == 'brush':
+        b = get_active_brush()
+        if b is not None:
+            return b
+    return None
+
 def get_active_asset():
     scene = bpy.context.scene
     ui_props = scene.blenderkitUI
@@ -173,7 +211,8 @@ def get_active_asset():
             return ob
     if ui_props.asset_type == 'SCENE':
         return bpy.context.scene
-
+    if ui_props.asset_type == 'HDR':
+        return get_active_HDR()
     elif ui_props.asset_type == 'MATERIAL':
         if bpy.context.view_layer.objects.active is not None and bpy.context.active_object.active_material is not None:
             return bpy.context.active_object.active_material
@@ -196,6 +235,12 @@ def get_upload_props():
     if ui_props.asset_type == 'SCENE':
         s = bpy.context.scene
         return s.blenderkit
+    if ui_props.asset_type == 'HDR':
+
+        hdr = ui_props.hdr_upload_image  # bpy.data.images.get(ui_props.hdr_upload_image)
+        if not hdr:
+            return None
+        return hdr.blenderkit
     elif ui_props.asset_type == 'MATERIAL':
         if bpy.context.view_layer.objects.active is not None and bpy.context.active_object.active_material is not None:
             return bpy.context.active_object.active_material.blenderkit
@@ -230,11 +275,16 @@ def load_prefs():
     # if user_preferences.api_key == '':
     fpath = paths.BLENDERKIT_SETTINGS_FILENAME
     if os.path.exists(fpath):
-        with open(fpath, 'r') as s:
-            prefs = json.load(s)
-            user_preferences.api_key = prefs.get('API_key', '')
-            user_preferences.global_dir = prefs.get('global_dir', paths.default_global_dict())
-            user_preferences.api_key_refresh = prefs.get('API_key_refresh', '')
+        try:
+            with open(fpath, 'r', encoding='utf-8') as s:
+                prefs = json.load(s)
+                user_preferences.api_key = prefs.get('API_key', '')
+                user_preferences.global_dir = prefs.get('global_dir', paths.default_global_dict())
+                user_preferences.api_key_refresh = prefs.get('API_key_refresh', '')
+        except Exception as e:
+            print('failed to read addon preferences.')
+            print(e)
+            os.remove(fpath)
 
 
 def save_prefs(self, context):
@@ -258,33 +308,51 @@ def save_prefs(self, context):
             fpath = paths.BLENDERKIT_SETTINGS_FILENAME
             if not os.path.exists(paths._presets):
                 os.makedirs(paths._presets)
-            f = open(fpath, 'w')
-            with open(fpath, 'w') as s:
-                json.dump(prefs, s)
+            with open(fpath, 'w', encoding='utf-8') as s:
+                json.dump(prefs, s, ensure_ascii=False, indent=4)
         except Exception as e:
             print(e)
 
 
-def get_hidden_texture(tpath, bdata_name, force_reload=False):
-    i = get_hidden_image(tpath, bdata_name, force_reload=force_reload)
-    bdata_name = f".{bdata_name}"
-    t = bpy.data.textures.get(bdata_name)
+def uploadable_asset_poll():
+    '''returns true if active asset type can be uploaded'''
+    ui_props = bpy.context.scene.blenderkitUI
+    if ui_props.asset_type == 'MODEL':
+        return bpy.context.view_layer.objects.active is not None
+    if ui_props.asset_type == 'MATERIAL':
+        return bpy.context.view_layer.objects.active is not None and bpy.context.active_object.active_material is not None
+    if ui_props.asset_type == 'HDR':
+        return ui_props.hdr_upload_image is not None
+    return True
+
+
+def get_hidden_texture(name, force_reload=False):
+    t = bpy.data.textures.get(name)
     if t is None:
-        t = bpy.data.textures.new('.test', 'IMAGE')
-    if t.image != i:
-        t.image = i
+        t = bpy.data.textures.new(name, 'IMAGE')
+    if not t.image or t.image.name != name:
+        img = bpy.data.images.get(name)
+        if img:
+            t.image = img
     return t
 
 
-def get_hidden_image(tpath, bdata_name, force_reload=False):
-    hidden_name = '.%s' % bdata_name
+def img_to_preview(img):
+    img.preview.image_size = (img.size[0], img.size[1])
+    img.preview.image_pixels_float = img.pixels[:]
+    # img.preview.icon_size = (img.size[0], img.size[1])
+    # img.preview.icon_pixels_float = img.pixels[:]
+
+def get_hidden_image(tpath, bdata_name, force_reload=False, colorspace='sRGB'):
+    if bdata_name[0] == '.':
+        hidden_name = bdata_name
+    else:
+        hidden_name = '.%s' % bdata_name
     img = bpy.data.images.get(hidden_name)
 
     if tpath.startswith('//'):
         tpath = bpy.path.abspath(tpath)
 
-    gap = '\n\n\n'
-    en = '\n'
     if img == None or (img.filepath != tpath):
         if tpath.startswith('//'):
             tpath = bpy.path.abspath(tpath)
@@ -293,6 +361,7 @@ def get_hidden_image(tpath, bdata_name, force_reload=False):
 
         if img is None:
             img = bpy.data.images.load(tpath)
+            img_to_preview(img)
             img.name = hidden_name
         else:
             if img.filepath != tpath:
@@ -301,12 +370,16 @@ def get_hidden_image(tpath, bdata_name, force_reload=False):
 
                 img.filepath = tpath
                 img.reload()
-        img.colorspace_settings.name = 'sRGB'
+                img_to_preview(img)
+        image_utils.set_colorspace(img, colorspace)
+
     elif force_reload:
         if img.packed_file is not None:
             img.unpack(method='USE_ORIGINAL')
         img.reload()
-        img.colorspace_settings.name = 'sRGB'
+        img_to_preview(img)
+        image_utils.set_colorspace(img, colorspace)
+
     return img
 
 
@@ -316,11 +389,20 @@ def get_thumbnail(name):
     img = bpy.data.images.get(name)
     if img == None:
         img = bpy.data.images.load(p)
-        img.colorspace_settings.name = 'sRGB'
+        image_utils.set_colorspace(img, 'sRGB')
         img.name = name
         img.name = name
 
     return img
+
+
+def files_size_to_text(size):
+    fsmb = size / (1024 * 1024)
+    fskb = size % 1024
+    if fsmb == 0:
+        return f'{round(fskb)}KB'
+    else:
+        return f'{round(fsmb, 1)}MB'
 
 
 def get_brush_props(context):
@@ -330,13 +412,49 @@ def get_brush_props(context):
     return None
 
 
-def p(text, text1='', text2='', text3='', text4='', text5=''):
+def p(text, text1='', text2='', text3='', text4='', text5='', level='DEBUG'):
     '''debug printing depending on blender's debug value'''
-    if bpy.app.debug_value != 0:
-        print(text, text1, text2, text3, text4, text5)
+
+    if 1:  # bpy.app.debug_value != 0:
+        # print('-----BKit debug-----\n')
+        # traceback.print_stack()
+        texts = [text1, text2, text3, text4, text5]
+        text = str(text)
+        for t in texts:
+            if t != '':
+                text += ' ' + str(t)
+
+        bk_logger.debug(text)
+        # print('---------------------\n')
 
 
-def pprint(data):
+def copy_asset(fp1, fp2):
+    '''synchronizes the asset between folders, including it's texture subdirectories'''
+    if 1:
+        bk_logger.debug('copy asset')
+        bk_logger.debug(fp1 + ' ' + fp2)
+        if not os.path.exists(fp2):
+            shutil.copyfile(fp1, fp2)
+            bk_logger.debug('copied')
+        source_dir = os.path.dirname(fp1)
+        target_dir = os.path.dirname(fp2)
+        for subdir in os.scandir(source_dir):
+            if not subdir.is_dir():
+                continue
+            target_subdir = os.path.join(target_dir, subdir.name)
+            if os.path.exists(target_subdir):
+                continue
+            bk_logger.debug(str(subdir) + ' ' + str(target_subdir))
+            shutil.copytree(subdir, target_subdir)
+            bk_logger.debug('copied')
+
+    # except Exception as e:
+    #     print('BlenderKit failed to copy asset')
+    #     print(fp1, fp2)
+    #     print(e)
+
+
+def pprint(data, data1=None, data2=None, data3=None, data4=None):
     '''pretty print jsons'''
     p(json.dumps(data, indent=4, sort_keys=True))
 
@@ -345,6 +463,8 @@ def get_hierarchy(ob):
     '''get all objects in a tree'''
     obs = []
     doobs = [ob]
+    # pprint('get hierarchy')
+    pprint(ob.name)
     while len(doobs) > 0:
         o = doobs.pop()
         doobs.extend(o.children)
@@ -497,14 +617,13 @@ def scale_uvs(ob, scale=1.0, pivot=Vector((.5, .5))):
 
 # map uv cubic and switch of auto tex space and set it to 1,1,1
 def automap(target_object=None, target_slot=None, tex_size=1, bg_exception=False, just_scale=False):
-    from blenderkit import bg_blender as bg
     s = bpy.context.scene
     mat_props = s.blenderkit_mat
     if mat_props.automap:
         tob = bpy.data.objects[target_object]
         # only automap mesh models
-        if tob.type == 'MESH' and len(tob.data.polygons)>0:
-            #check polycount for a rare case where no polys are in editmesh
+        if tob.type == 'MESH' and len(tob.data.polygons) > 0:
+            # check polycount for a rare case where no polys are in editmesh
             actob = bpy.context.active_object
             bpy.context.view_layer.objects.active = tob
 
@@ -553,8 +672,15 @@ def automap(target_object=None, target_slot=None, tex_size=1, bg_exception=False
             bpy.context.view_layer.objects.active = actob
 
 
-def name_update():
-    props = get_upload_props()
+def name_update(props):
+    '''
+    Update asset name function, gets run also before upload. Makes sure name doesn't change in case of reuploads,
+    and only displayName gets written to server.
+    '''
+    scene = bpy.context.scene
+    ui_props = scene.blenderkitUI
+
+    # props = get_upload_props()
     if props.name_old != props.name:
         props.name_changed = True
         props.name_old = props.name
@@ -570,7 +696,23 @@ def name_update():
     fname = fname.replace('\'', '')
     fname = fname.replace('\"', '')
     asset = get_active_asset()
-    asset.name = fname
+    if ui_props.asset_type != 'HDR':
+        # Here we actually rename assets datablocks, but don't do that with HDR's and possibly with others
+        asset.name = fname
+
+def fmt_length(prop):
+    prop = str(round(prop, 2))
+    return prop
+
+def get_param(asset_data, parameter_name, default = None):
+    if not asset_data.get('parameters'):
+        # this can appear in older version files.
+        return default
+
+    for p in asset_data['parameters']:
+        if p.get('parameterType') == parameter_name:
+            return p['value']
+    return default
 
 
 def params_to_dict(params):
@@ -604,6 +746,31 @@ def dict_to_params(inputs, parameters=None):
     return parameters
 
 
+def update_tags(self, context):
+    props = self
+
+    commasep = props.tags.split(',')
+    ntags = []
+    for tag in commasep:
+        if len(tag) > 19:
+            short_tags = tag.split(' ')
+            for short_tag in short_tags:
+                if len(short_tag) > 19:
+                    short_tag = short_tag[:18]
+                ntags.append(short_tag)
+        else:
+            ntags.append(tag)
+    if len(ntags) == 1:
+        ntags = ntags[0].split(' ')
+    ns = ''
+    for t in ntags:
+        if t != '':
+            ns += t + ','
+    ns = ns[:-1]
+    if props.tags != ns:
+        props.tags = ns
+
+
 def user_logged_in():
     a = bpy.context.window_manager.get('bkit profile')
     if a is not None:
@@ -617,9 +784,22 @@ def profile_is_validator():
         return True
     return False
 
+def user_is_owner(asset_data=None):
+    '''Checks if the current logged in user is owner of the asset'''
+    profile = bpy.context.window_manager.get('bkit profile')
+    if profile is None:
+        return False
+    if int(asset_data['author']['id']) == int(profile['user']['id']):
+        return True
+    return False
 
 def guard_from_crash():
-    '''Blender tends to crash when trying to run some functions with the addon going through unregistration process.'''
+    '''
+    Blender tends to crash when trying to run some functions
+     with the addon going through unregistration process.
+     This function is used in these functions (like draw callbacks)
+     so these don't run during unregistration.
+     '''
     if bpy.context.preferences.addons.get('blenderkit') is None:
         return False;
     if bpy.context.preferences.addons['blenderkit'].preferences is None:
@@ -644,10 +824,10 @@ def get_largest_area(area_type='VIEW_3D'):
                     for r in a.regions:
                         if r.type == 'WINDOW':
                             region = r
-    global active_area, active_window, active_region
-    active_window = maxw
-    active_area = maxa
-    active_region = region
+    global active_area_pointer, active_window_pointer, active_region_pointer
+    active_window_pointer = maxw.as_pointer()
+    active_area_pointer = maxa.as_pointer()
+    active_region_pointer = region.as_pointer()
     return maxw, maxa, region
 
 
@@ -655,17 +835,18 @@ def get_fake_context(context, area_type='VIEW_3D'):
     C_dict = {}  # context.copy() #context.copy was a source of problems - incompatibility with addons that also define context
     C_dict.update(region='WINDOW')
 
-    try:
-        context = context.copy()
-    except Exception as e:
-        print(e)
-        print('BlenderKit: context.copy() failed. probably a colliding addon.')
-        context = {}
+    # try:
+    #     context = context.copy()
+    #     # print('bk context copied successfully')
+    # except Exception as e:
+    #     print(e)
+    #     print('BlenderKit: context.copy() failed. Can be a colliding addon.')
+    context = {}
 
     if context.get('area') is None or context.get('area').type != area_type:
         w, a, r = get_largest_area(area_type=area_type)
         if w:
-            #sometimes there is no area of the requested type. Let's face it, some people use Blender without 3d view.
+            # sometimes there is no area of the requested type. Let's face it, some people use Blender without 3d view.
             override = {'window': w, 'screen': w.screen, 'area': a, 'region': r}
             C_dict.update(override)
         # print(w,a,r)
@@ -699,3 +880,7 @@ def label_multiline(layout, text='', icon='NONE', width=-1):
             break;
         layout.label(text=l, icon=icon)
         icon = 'NONE'
+
+
+def trace():
+    traceback.print_stack()

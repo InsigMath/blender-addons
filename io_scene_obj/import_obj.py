@@ -905,7 +905,7 @@ def any_number_as_int(svalue):
 def load(context,
          filepath,
          *,
-         global_clight_size=0.0,
+         global_clamp_size=0.0,
          use_smooth_groups=True,
          use_edges=True,
          use_split_objects=True,
@@ -1024,6 +1024,10 @@ def load(context,
                     continue
 
                 line_start = line_split[0]  # we compare with this a _lot_
+
+                if len(line_split) == 1 and not context_multi_line and line_start != b'end':
+                    print("WARNING, skipping malformatted line: %s" % line.decode('UTF-8', 'replace').rstrip())
+                    continue
 
                 # Handling vertex data are pretty similar, factorize that.
                 # Also, most OBJ files store all those on a single line, so try fast parsing for that first,
@@ -1293,7 +1297,7 @@ def load(context,
         axis_min = [1000000000] * 3
         axis_max = [-1000000000] * 3
 
-        if global_clight_size:
+        if global_clamp_size:
             # Get all object bounds
             for ob in new_objects:
                 for v in ob.bound_box:
@@ -1307,7 +1311,7 @@ def load(context,
             max_axis = max(axis_max[0] - axis_min[0], axis_max[1] - axis_min[1], axis_max[2] - axis_min[2])
             scale = 1.0
 
-            while global_clight_size < max_axis * scale:
+            while global_clamp_size < max_axis * scale:
                 scale = scale / 10.0
 
             for obj in new_objects:
